@@ -1,0 +1,5 @@
+export { EditModal } from './EditModal'
+export { BookingEditModal } from './BookingEditModal'
+export { DeskEditModal } from './DeskEditModal'
+export { InventoryEditModal } from './InventoryEditModal'
+export { OrderEditModal } from './OrderEditModal'
