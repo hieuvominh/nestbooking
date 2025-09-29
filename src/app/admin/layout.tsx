@@ -74,16 +74,17 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
       {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg border-r border-slate-200/50">
+      <div className="w-64 bg-white shadow-lg border-r border-slate-200/50 flex flex-col h-screen fixed left-0 top-0">
         {/* Logo Section */}
-        <div className="flex items-center h-16 px-6 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700">
+        <div className="flex items-center h-16 px-6 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
           <div className="flex items-center space-x-2">
             <Building2 className="h-8 w-8 text-white" />
             <h1 className="text-xl font-bold text-white">BookingCoo</h1>
           </div>
         </div>
         
-        <nav className="mt-8 px-4">
+        {/* Navigation - flex-1 to take up available space */}
+        <nav className="flex-1 mt-8 px-4 overflow-y-auto">
           <div className="space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -166,8 +167,8 @@ export default function AdminLayout({
           </div>
         </nav>
         
-        {/* User section at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 w-64 p-4 border-t border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100">
+        {/* User section at bottom - flex-shrink-0 to prevent shrinking */}
+        <div className="flex-shrink-0 p-4 border-t border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
@@ -190,8 +191,8 @@ export default function AdminLayout({
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-auto">
+      {/* Main content - add margin-left to account for fixed sidebar */}
+      <div className="flex-1 ml-64 overflow-auto">
         <main className="p-8">
           <div className="max-w-7xl mx-auto">
             {children}

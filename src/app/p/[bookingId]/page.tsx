@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -60,7 +60,9 @@ interface Order {
 
 export default function PublicBookingPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const bookingId = params.bookingId as string;
+  const token = searchParams.get('t');
   
   const [booking, setBooking] = useState<Booking | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -77,7 +79,11 @@ export default function PublicBookingPage() {
 
   const fetchBookingData = async () => {
     try {
-      const response = await fetch(`/api/public/booking/${bookingId}`);
+      if (!token) {
+        throw new Error('Access token required');
+      }
+      
+      const response = await fetch(`/api/public/${bookingId}?t=${token}`);
       if (!response.ok) {
         throw new Error('Booking not found or access denied');
       }

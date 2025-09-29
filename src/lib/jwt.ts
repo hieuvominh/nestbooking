@@ -50,9 +50,7 @@ export function signPublicBookingToken(
     exp: Math.floor(expiresAt.getTime() / 1000),
   };
 
-  return jwt.sign(payload, JWT_PUBLIC_SECRET, {
-    expiresIn: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
-  });
+  return jwt.sign(payload, JWT_PUBLIC_SECRET);
 }
 
 // Verify public booking token

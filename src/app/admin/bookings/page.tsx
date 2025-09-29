@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useApi } from '@/hooks/useApi';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,6 +59,7 @@ interface Desk {
 }
 
 export default function BookingsPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,53 +73,10 @@ export default function BookingsPage() {
   });
   const { apiCall } = useApi();
 
-  const handleSaveBooking = async (data: any) => {
-    setIsLoading(true);
-    try {
-      if (editingBooking) {
-        // Transform the form data to match API expectations for updates
-        const updateData = {
-          deskId: data.deskId,
-          customer: {
-            name: data.customerName,
-            email: data.customerEmail,
-            phone: editingBooking.customer.phone // Keep existing phone
-          },
-          startTime: data.startTime,
-          endTime: data.endTime,
-          status: data.status
-        };
-        
-        await apiCall(`/api/bookings/${editingBooking._id}`, {
-          method: 'PUT',
-          body: JSON.stringify(updateData)
-        });
-      } else {
-        // Transform the form data to match API expectations
-        const bookingData = {
-          deskId: data.deskId,
-          customer: {
-            name: data.customerName,
-            email: data.customerEmail,
-            phone: '' // Default empty phone since it's not in the form
-          },
-          startTime: data.startTime,
-          endTime: data.endTime
-        };
-        
-        await apiCall('/api/bookings', {
-          method: 'POST',
-          body: JSON.stringify(bookingData)
-        });
-      }
-      mutateBookings();
-      setIsModalOpen(false);
-      setEditingBooking(null);
-    } catch (error) {
-      console.error('Error saving booking:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSaveBooking = async () => {
+    // This function is now handled inside the modal
+    // Just refresh the bookings list
+    mutateBookings();
   };
 
   const handleDelete = async (id: string) => {
@@ -217,7 +176,11 @@ export default function BookingsPage() {
             </TableHeader>
             <TableBody>
               {bookings?.map((booking) => (
-                <TableRow key={booking._id}>
+                <TableRow 
+                  key={booking._id} 
+                  className="cursor-pointer hover:bg-gray-50"
+                  onClick={() => router.push(`/admin/bookings/${booking._id}`)}
+                >
                   <TableCell>
                     <div>
                       <div className="font-medium">{booking.customer.name}</div>
@@ -238,7 +201,13 @@ export default function BookingsPage() {
                         {formatDateTime(booking.checkedInAt)}
                       </span>
                     ) : booking.status === 'confirmed' ? (
-                      <Button size="sm" onClick={() => handleCheckIn(booking._id)}>
+                      <Button 
+                        size="sm" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCheckIn(booking._id);
+                        }}
+                      >
                         Check In
                       </Button>
                     ) : (
@@ -258,7 +227,10 @@ export default function BookingsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleEdit(booking)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(booking);
+                        }}
                       >
                         Edit
                       </Button>
@@ -266,7 +238,10 @@ export default function BookingsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => generatePublicUrl(booking._id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            generatePublicUrl(booking._id);
+                          }}
                         >
                           Generate URL
                         </Button>
@@ -275,7 +250,8 @@ export default function BookingsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             navigator.clipboard.writeText(`${window.location.origin}/p/${booking._id}`);
                             alert('Public URL copied to clipboard!');
                           }}
@@ -286,7 +262,10 @@ export default function BookingsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDelete(booking._id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(booking._id);
+                        }}
                         className="text-red-600 hover:bg-red-50"
                       >
                         Delete
@@ -310,8 +289,12 @@ export default function BookingsPage() {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         booking={editingBooking}
-        desks={desks || []}
         onSave={handleSaveBooking}
+        onSuccess={() => {
+          mutateBookings();
+          setIsModalOpen(false);
+          setEditingBooking(null);
+        }}
         isLoading={isLoading}
       />
     </div>
