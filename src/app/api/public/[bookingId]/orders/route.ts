@@ -54,8 +54,12 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.badRequest('Invalid booking ID');
     }
 
+    const body = await request.json();
+    const { items, notes, token: bodyToken } = body;
+
+    // Get token from query params or request body
     const { searchParams } = new URL(request.url);
-    const token = searchParams.get('t');
+    const token = searchParams.get('t') || bodyToken;
 
     if (!token) {
       return ApiResponses.unauthorized('Access token required');
@@ -65,9 +69,6 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     if (!validatePublicBookingAccess(bookingId, token)) {
       return ApiResponses.unauthorized('Invalid or expired access token');
     }
-
-    const body = await request.json();
-    const { items, notes } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return ApiResponses.badRequest('Order must contain at least one item');
@@ -87,88 +88,80 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     const orderItems = [];
     let totalAmount = 0;
 
-    // Use transaction to ensure atomic inventory updates
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    // First pass: Validate all items and check availability
+    for (const item of items) {
+      const { itemId, sku, quantity } = item;
+      const actualItemId = itemId || sku; // Support both field names
 
-    try {
-      for (const item of items) {
-        const { itemId, quantity } = item;
-
-        if (!mongoose.Types.ObjectId.isValid(itemId)) {
-          throw new Error(`Invalid item ID: ${itemId}`);
-        }
-
-        if (!quantity || quantity <= 0) {
-          throw new Error(`Invalid quantity for item: ${itemId}`);
-        }
-
-        // Find inventory item and check availability
-        const inventoryItem = await InventoryItem.findById(itemId).session(session);
-        if (!inventoryItem) {
-          throw new Error(`Item not found: ${itemId}`);
-        }
-
-        if (!inventoryItem.isActive) {
-          throw new Error(`Item is not available: ${inventoryItem.name}`);
-        }
-
-        if (inventoryItem.quantity < quantity) {
-          throw new Error(`Insufficient stock for ${inventoryItem.name}. Available: ${inventoryItem.quantity}`);
-        }
-
-        // Update inventory (decrement stock)
-        inventoryItem.quantity -= quantity;
-        await inventoryItem.save({ session });
-
-        // Add to order items
-        const subtotal = inventoryItem.price * quantity;
-        orderItems.push({
-          itemId: inventoryItem._id,
-          name: inventoryItem.name,
-          price: inventoryItem.price,
-          quantity,
-          subtotal
-        });
-
-        totalAmount += subtotal;
+      if (!mongoose.Types.ObjectId.isValid(actualItemId)) {
+        return ApiResponses.badRequest(`Invalid item ID: ${actualItemId}`);
       }
 
-      // Create order
-      const order = new Order({
-        bookingId,
-        items: orderItems,
-        total: totalAmount,
-        notes
+      if (!quantity || quantity <= 0) {
+        return ApiResponses.badRequest(`Invalid quantity for item: ${actualItemId}`);
+      }
+
+      // Find inventory item and check availability
+      const inventoryItem = await InventoryItem.findById(actualItemId);
+      if (!inventoryItem) {
+        return ApiResponses.badRequest(`Item not found: ${actualItemId}`);
+      }
+
+      if (!inventoryItem.isActive) {
+        return ApiResponses.badRequest(`Item is not available: ${inventoryItem.name}`);
+      }
+
+      if (inventoryItem.quantity < quantity) {
+        return ApiResponses.badRequest(`Insufficient stock for ${inventoryItem.name}. Available: ${inventoryItem.quantity}`);
+      }
+
+      // Add to order items
+      const subtotal = inventoryItem.price * quantity;
+      orderItems.push({
+        itemId: inventoryItem._id,
+        name: inventoryItem.name,
+        price: inventoryItem.price,
+        quantity,
+        subtotal
       });
 
-      await order.save({ session });
-
-      // Create transaction record
-      const transaction = new Transaction({
-        type: 'income',
-        amount: totalAmount,
-        source: 'order',
-        description: `Order from booking ${bookingId}`,
-        referenceId: order._id,
-        referenceModel: 'Order'
-      });
-
-      await transaction.save({ session });
-
-      await session.commitTransaction();
-
-      // Populate items for response
-      await order.populate('items.itemId', 'name price imageUrl');
-
-      return ApiResponses.created(order, 'Order placed successfully');
-
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      await session.endSession();
+      totalAmount += subtotal;
     }
+
+    // Second pass: Update inventory quantities
+    for (const orderItem of orderItems) {
+      await InventoryItem.findByIdAndUpdate(
+        orderItem.itemId,
+        { $inc: { quantity: -orderItem.quantity } }
+      );
+    }
+
+    // Create order
+    const order = new Order({
+      bookingId,
+      items: orderItems,
+      total: totalAmount,
+      notes
+    });
+
+    await order.save();
+
+    // Create transaction record
+    const transaction = new Transaction({
+      type: 'income',
+      amount: totalAmount,
+      source: 'order',
+      description: `Order from booking ${bookingId}`,
+      referenceId: order._id,
+      referenceModel: 'Order'
+    });
+
+    await transaction.save();
+
+    // Populate items for response
+    await order.populate('items.itemId', 'name price imageUrl');
+
+    return ApiResponses.created(order, 'Order placed successfully');
 
   } catch (error) {
     console.error('Place order error:', error);

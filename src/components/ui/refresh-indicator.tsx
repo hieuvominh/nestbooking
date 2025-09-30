@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 interface RefreshIndicatorProps {
   isLoading?: boolean;
@@ -6,18 +6,20 @@ interface RefreshIndicatorProps {
   refreshInterval?: number;
 }
 
-export function RefreshIndicator({ 
-  isLoading = false, 
-  lastUpdated, 
-  refreshInterval = 10000 
+export function RefreshIndicator({
+  isLoading = false,
+  lastUpdated,
+  refreshInterval = 10000,
 }: RefreshIndicatorProps) {
-  const [timeUntilRefresh, setTimeUntilRefresh] = useState(refreshInterval / 1000);
+  const [timeUntilRefresh, setTimeUntilRefresh] = useState(
+    refreshInterval / 1000
+  );
 
   useEffect(() => {
     if (!refreshInterval) return;
 
     const interval = setInterval(() => {
-      setTimeUntilRefresh(prev => {
+      setTimeUntilRefresh((prev) => {
         if (prev <= 1) {
           return refreshInterval / 1000;
         }
@@ -30,9 +32,13 @@ export function RefreshIndicator({
 
   return (
     <div className="flex items-center gap-2 text-sm text-gray-500">
-      <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`} />
+      <div
+        className={`w-2 h-2 rounded-full ${
+          isLoading ? "bg-blue-500 animate-pulse" : "bg-green-500"
+        }`}
+      />
       <span>
-        {isLoading ? 'Updating...' : `Next update in ${timeUntilRefresh}s`}
+        {isLoading ? "Updating..." : `Next update in ${timeUntilRefresh}s`}
       </span>
       {lastUpdated && (
         <span className="text-xs">

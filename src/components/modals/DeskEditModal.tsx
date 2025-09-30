@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { EditModal } from './EditModal'
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { EditModal } from "./EditModal";
 import {
   Form,
   FormControl,
@@ -12,43 +12,43 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 
 const deskSchema = z.object({
-  label: z.string().min(1, 'Desk label is required'),
+  label: z.string().min(1, "Desk label is required"),
   location: z.string().optional(),
   description: z.string().optional(),
-  hourlyRate: z.number().min(0, 'Hourly rate must be positive'),
-  status: z.enum(['available', 'reserved', 'occupied', 'maintenance'])
-})
+  hourlyRate: z.number().min(0, "Hourly rate must be positive"),
+  status: z.enum(["available", "reserved", "occupied", "maintenance"]),
+});
 
-type DeskFormData = z.infer<typeof deskSchema>
+type DeskFormData = z.infer<typeof deskSchema>;
 
 interface Desk {
-  _id: string
-  label: string
-  status: 'available' | 'reserved' | 'occupied' | 'maintenance'
-  location?: string
-  description?: string
-  hourlyRate: number
-  createdAt: string
-  updatedAt: string
+  _id: string;
+  label: string;
+  status: "available" | "reserved" | "occupied" | "maintenance";
+  location?: string;
+  description?: string;
+  hourlyRate: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface DeskEditModalProps {
-  isOpen: boolean
-  onClose: () => void
-  desk?: Desk | null
-  onSave: (data: DeskFormData) => Promise<void>
-  isLoading?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  desk?: Desk | null;
+  onSave: (data: DeskFormData) => Promise<void>;
+  isLoading?: boolean;
 }
 
 export function DeskEditModal({
@@ -56,56 +56,56 @@ export function DeskEditModal({
   onClose,
   desk,
   onSave,
-  isLoading = false
+  isLoading = false,
 }: DeskEditModalProps) {
   const form = useForm<DeskFormData>({
     resolver: zodResolver(deskSchema),
     defaultValues: {
-      label: '',
-      location: '',
-      description: '',
+      label: "",
+      location: "",
+      description: "",
       hourlyRate: 10,
-      status: 'available'
-    }
-  })
+      status: "available",
+    },
+  });
 
   useEffect(() => {
     if (desk) {
       form.reset({
         label: desk.label,
-        location: desk.location || '',
-        description: desk.description || '',
+        location: desk.location || "",
+        description: desk.description || "",
         hourlyRate: desk.hourlyRate,
-        status: desk.status
-      })
+        status: desk.status,
+      });
     } else {
       form.reset({
-        label: '',
-        location: '',
-        description: '',
+        label: "",
+        location: "",
+        description: "",
         hourlyRate: 10,
-        status: 'available'
-      })
+        status: "available",
+      });
     }
-  }, [desk, form])
+  }, [desk, form]);
 
   const handleSave = async () => {
-    const isValid = await form.trigger()
+    const isValid = await form.trigger();
     if (isValid) {
-      const data = form.getValues()
-      await onSave(data)
+      const data = form.getValues();
+      await onSave(data);
     }
-  }
+  };
 
   const handleCancel = () => {
-    form.reset()
-  }
+    form.reset();
+  };
 
   return (
     <EditModal
       isOpen={isOpen}
       onClose={onClose}
-      title={desk ? 'Edit Desk' : 'Create Desk'}
+      title={desk ? "Edit Desk" : "Create Desk"}
       onSave={handleSave}
       onCancel={handleCancel}
       isLoading={isLoading}
@@ -125,7 +125,7 @@ export function DeskEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="hourlyRate"
@@ -133,20 +133,22 @@ export function DeskEditModal({
               <FormItem>
                 <FormLabel>Hourly Rate *</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="number" 
-                    min="0" 
-                    step="0.01" 
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
                     placeholder="10.00"
                     {...field}
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      field.onChange(parseFloat(e.target.value) || 0)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="location"
@@ -160,7 +162,7 @@ export function DeskEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="status"
@@ -184,7 +186,7 @@ export function DeskEditModal({
               </FormItem>
             )}
           />
-          
+
           <div className="md:col-span-2">
             <FormField
               control={form.control}
@@ -207,5 +209,5 @@ export function DeskEditModal({
         </div>
       </Form>
     </EditModal>
-  )
+  );
 }

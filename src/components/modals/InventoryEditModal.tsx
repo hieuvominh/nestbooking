@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { EditModal } from './EditModal'
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { EditModal } from "./EditModal";
 import {
   Form,
   FormControl,
@@ -12,49 +12,49 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 
 const inventorySchema = z.object({
-  name: z.string().min(1, 'Item name is required'),
+  name: z.string().min(1, "Item name is required"),
   description: z.string().optional(),
-  price: z.number().min(0, 'Price must be positive'),
-  quantity: z.number().min(0, 'Quantity must be positive'),
-  category: z.enum(['food', 'beverage', 'office-supplies', 'merchandise']),
-  unit: z.string().min(1, 'Unit is required'),
-  sku: z.string().min(1, 'SKU is required'),
-  lowStockThreshold: z.number().min(0, 'Low stock threshold must be positive')
-})
+  price: z.number().min(0, "Price must be positive"),
+  quantity: z.number().min(0, "Quantity must be positive"),
+  category: z.enum(["food", "beverage", "office-supplies", "merchandise"]),
+  unit: z.string().min(1, "Unit is required"),
+  sku: z.string().min(1, "SKU is required"),
+  lowStockThreshold: z.number().min(0, "Low stock threshold must be positive"),
+});
 
-type InventoryFormData = z.infer<typeof inventorySchema>
+type InventoryFormData = z.infer<typeof inventorySchema>;
 
 interface InventoryItem {
-  _id: string
-  name: string
-  description: string
-  price: number
-  quantity: number
-  category: 'food' | 'beverage' | 'office-supplies' | 'merchandise'
-  unit: string
-  sku: string
-  lowStockThreshold: number
-  createdAt: string
-  updatedAt: string
+  _id: string;
+  name: string;
+  description: string;
+  price: number;
+  quantity: number;
+  category: "food" | "beverage" | "office-supplies" | "merchandise";
+  unit: string;
+  sku: string;
+  lowStockThreshold: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface InventoryEditModalProps {
-  isOpen: boolean
-  onClose: () => void
-  item?: InventoryItem | null
-  onSave: (data: InventoryFormData) => Promise<void>
-  isLoading?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  item?: InventoryItem | null;
+  onSave: (data: InventoryFormData) => Promise<void>;
+  isLoading?: boolean;
 }
 
 export function InventoryEditModal({
@@ -62,65 +62,65 @@ export function InventoryEditModal({
   onClose,
   item,
   onSave,
-  isLoading = false
+  isLoading = false,
 }: InventoryEditModalProps) {
   const form = useForm<InventoryFormData>({
     resolver: zodResolver(inventorySchema),
     defaultValues: {
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       price: 0,
       quantity: 0,
-      category: 'food',
-      unit: 'pcs',
-      sku: '',
-      lowStockThreshold: 5
-    }
-  })
+      category: "food",
+      unit: "pcs",
+      sku: "",
+      lowStockThreshold: 5,
+    },
+  });
 
   useEffect(() => {
     if (item) {
       form.reset({
         name: item.name,
-        description: item.description || '',
+        description: item.description || "",
         price: item.price,
         quantity: item.quantity,
         category: item.category,
         unit: item.unit,
         sku: item.sku,
-        lowStockThreshold: item.lowStockThreshold
-      })
+        lowStockThreshold: item.lowStockThreshold,
+      });
     } else {
       form.reset({
-        name: '',
-        description: '',
+        name: "",
+        description: "",
         price: 0,
         quantity: 0,
-        category: 'food',
-        unit: 'pcs',
-        sku: '',
-        lowStockThreshold: 5
-      })
+        category: "food",
+        unit: "pcs",
+        sku: "",
+        lowStockThreshold: 5,
+      });
     }
-  }, [item, form])
+  }, [item, form]);
 
   const handleSave = async () => {
-    const isValid = await form.trigger()
+    const isValid = await form.trigger();
     if (isValid) {
-      const data = form.getValues()
-      await onSave(data)
+      const data = form.getValues();
+      await onSave(data);
     }
-  }
+  };
 
   const handleCancel = () => {
-    form.reset()
-  }
+    form.reset();
+  };
 
   return (
     <EditModal
       isOpen={isOpen}
       onClose={onClose}
-      title={item ? 'Edit Inventory Item' : 'Create Inventory Item'}
+      title={item ? "Edit Inventory Item" : "Create Inventory Item"}
       onSave={handleSave}
       onCancel={handleCancel}
       isLoading={isLoading}
@@ -140,7 +140,7 @@ export function InventoryEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="sku"
@@ -154,7 +154,7 @@ export function InventoryEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="category"
@@ -170,7 +170,9 @@ export function InventoryEditModal({
                   <SelectContent>
                     <SelectItem value="food">Food</SelectItem>
                     <SelectItem value="beverage">Beverage</SelectItem>
-                    <SelectItem value="office-supplies">Office Supplies</SelectItem>
+                    <SelectItem value="office-supplies">
+                      Office Supplies
+                    </SelectItem>
                     <SelectItem value="merchandise">Merchandise</SelectItem>
                   </SelectContent>
                 </Select>
@@ -178,7 +180,7 @@ export function InventoryEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="unit"
@@ -192,7 +194,7 @@ export function InventoryEditModal({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="price"
@@ -200,20 +202,22 @@ export function InventoryEditModal({
               <FormItem>
                 <FormLabel>Price *</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="number" 
-                    min="0" 
-                    step="0.01" 
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
                     placeholder="0.00"
                     {...field}
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      field.onChange(parseFloat(e.target.value) || 0)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="quantity"
@@ -221,19 +225,21 @@ export function InventoryEditModal({
               <FormItem>
                 <FormLabel>Quantity *</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="number" 
-                    min="0" 
+                  <Input
+                    type="number"
+                    min="0"
                     placeholder="0"
                     {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      field.onChange(parseInt(e.target.value) || 0)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="lowStockThreshold"
@@ -241,19 +247,21 @@ export function InventoryEditModal({
               <FormItem>
                 <FormLabel>Low Stock Alert *</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="number" 
-                    min="0" 
+                  <Input
+                    type="number"
+                    min="0"
                     placeholder="5"
                     {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      field.onChange(parseInt(e.target.value) || 0)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <div className="md:col-span-2">
             <FormField
               control={form.control}
@@ -276,5 +284,5 @@ export function InventoryEditModal({
         </div>
       </Form>
     </EditModal>
-  )
+  );
 }

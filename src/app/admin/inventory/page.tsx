@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useApi } from '@/hooks/useApi';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from "react";
+import { useApi } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -11,14 +11,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 
 interface InventoryItem {
   _id: string;
@@ -26,7 +26,7 @@ interface InventoryItem {
   description: string;
   price: number;
   stock: number;
-  category: 'food' | 'drinks' | 'snacks' | 'supplies';
+  category: "food" | "drinks" | "snacks" | "supplies";
   isAvailable: boolean;
   image?: string;
 }
@@ -53,7 +53,13 @@ interface Order {
     subtotal: number;
   }[];
   total: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status:
+    | "pending"
+    | "confirmed"
+    | "preparing"
+    | "ready"
+    | "delivered"
+    | "cancelled";
   notes?: string;
   orderedAt: string;
   deliveredAt?: string;
@@ -74,31 +80,39 @@ interface OrdersResponse {
 export default function InventoryPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'inventory' | 'orders'>('inventory');
+  const [activeTab, setActiveTab] = useState<"inventory" | "orders">(
+    "inventory"
+  );
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
     price: number;
     stock: number;
-    category: 'food' | 'drinks' | 'snacks' | 'supplies';
+    category: "food" | "drinks" | "snacks" | "supplies";
     isAvailable: boolean;
     image: string;
   }>({
-    name: '',
-    description: '',
+    name: "",
+    description: "",
     price: 0,
     stock: 0,
-    category: 'food',
+    category: "food",
     isAvailable: true,
-    image: ''
+    image: "",
   });
 
-  const { data: inventory, mutate: mutateInventory } = useApi<InventoryItem[]>('/api/inventory', {
-    refreshInterval: 10000 // Poll every 10 seconds
-  });
-  const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>('/api/orders', {
-    refreshInterval: 5000 // Poll orders more frequently (5 seconds) for kitchen updates
-  });
+  const { data: inventory, mutate: mutateInventory } = useApi<InventoryItem[]>(
+    "/api/inventory",
+    {
+      refreshInterval: 10000, // Poll every 10 seconds
+    }
+  );
+  const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>(
+    "/api/orders",
+    {
+      refreshInterval: 5000, // Poll orders more frequently (5 seconds) for kitchen updates
+    }
+  );
   const { apiCall } = useApi();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,66 +120,69 @@ export default function InventoryPage() {
     try {
       if (editingItem) {
         await apiCall(`/api/inventory/${editingItem._id}`, {
-          method: 'PUT',
-          body: formData
+          method: "PUT",
+          body: formData,
         });
       } else {
-        await apiCall('/api/inventory', {
-          method: 'POST',
-          body: formData
+        await apiCall("/api/inventory", {
+          method: "POST",
+          body: formData,
         });
       }
       mutateInventory();
       resetForm();
     } catch (error) {
-      console.error('Error saving inventory item:', error);
+      console.error("Error saving inventory item:", error);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    
+    if (!confirm("Are you sure you want to delete this item?")) return;
+
     try {
-      await apiCall(`/api/inventory/${id}`, { method: 'DELETE' });
+      await apiCall(`/api/inventory/${id}`, { method: "DELETE" });
       mutateInventory();
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error("Error deleting item:", error);
     }
   };
 
   const handleStockUpdate = async (id: string, newStock: number) => {
     try {
       await apiCall(`/api/inventory/${id}`, {
-        method: 'PUT',
-        body: { stock: newStock }
+        method: "PUT",
+        body: { stock: newStock },
       });
       mutateInventory();
     } catch (error) {
-      console.error('Error updating stock:', error);
+      console.error("Error updating stock:", error);
     }
   };
 
-  const handleOrderStatusUpdate = async (orderId: string, status: Order['status']) => {
+  const handleOrderStatusUpdate = async (
+    orderId: string,
+    status: Order["status"]
+  ) => {
     try {
       await apiCall(`/api/orders/${orderId}`, {
-        method: 'PUT',
-        body: { status }
+        method: "PUT",
+        body: { status },
       });
       mutateOrders();
     } catch (error) {
-      console.error('Error updating order status:', error);
+      console.error("Error updating order status:", error);
     }
   };
 
   const resetForm = () => {
     setFormData({
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       price: 0,
       stock: 0,
-      category: 'food',
+      category: "food",
       isAvailable: true,
-      image: ''
+      image: "",
     });
     setIsCreating(false);
     setEditingItem(null);
@@ -179,26 +196,32 @@ export default function InventoryPage() {
       stock: item.stock,
       category: item.category,
       isAvailable: item.isAvailable,
-      image: item.image || ''
+      image: item.image || "",
     });
     setEditingItem(item);
     setIsCreating(true);
   };
 
   const getStockColor = (stock: number) => {
-    if (stock === 0) return 'text-red-600 bg-red-100';
-    if (stock < 10) return 'text-yellow-600 bg-yellow-100';
-    return 'text-green-600 bg-green-100';
+    if (stock === 0) return "text-red-600 bg-red-100";
+    if (stock < 10) return "text-yellow-600 bg-yellow-100";
+    return "text-green-600 bg-green-100";
   };
 
   const getOrderStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'text-yellow-600 bg-yellow-100';
-      case 'preparing': return 'text-blue-600 bg-blue-100';
-      case 'ready': return 'text-green-600 bg-green-100';
-      case 'delivered': return 'text-gray-600 bg-gray-100';
-      case 'cancelled': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case "pending":
+        return "text-yellow-600 bg-yellow-100";
+      case "preparing":
+        return "text-blue-600 bg-blue-100";
+      case "ready":
+        return "text-green-600 bg-green-100";
+      case "delivered":
+        return "text-gray-600 bg-gray-100";
+      case "cancelled":
+        return "text-red-600 bg-red-100";
+      default:
+        return "text-gray-600 bg-gray-100";
     }
   };
 
@@ -213,42 +236,44 @@ export default function InventoryPage() {
         <div className="flex gap-2">
           <div className="flex border rounded-lg">
             <button
-              onClick={() => setActiveTab('inventory')}
+              onClick={() => setActiveTab("inventory")}
               className={`px-4 py-2 rounded-l-lg ${
-                activeTab === 'inventory' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                activeTab === "inventory"
+                  ? "bg-blue-500 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-50"
               }`}
             >
               Inventory
             </button>
             <button
-              onClick={() => setActiveTab('orders')}
+              onClick={() => setActiveTab("orders")}
               className={`px-4 py-2 rounded-r-lg ${
-                activeTab === 'orders' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                activeTab === "orders"
+                  ? "bg-blue-500 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-50"
               }`}
             >
               Orders
             </button>
           </div>
-          {activeTab === 'inventory' && (
-            <Button onClick={() => setIsCreating(true)}>
-              Add New Item
-            </Button>
+          {activeTab === "inventory" && (
+            <Button onClick={() => setIsCreating(true)}>Add New Item</Button>
           )}
         </div>
       </div>
 
-      {activeTab === 'inventory' && (
+      {activeTab === "inventory" && (
         <>
           {isCreating && (
             <Card>
               <CardHeader>
-                <CardTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</CardTitle>
+                <CardTitle>
+                  {editingItem ? "Edit Item" : "Add New Item"}
+                </CardTitle>
                 <CardDescription>
-                  {editingItem ? 'Update item details' : 'Add a new item to inventory'}
+                  {editingItem
+                    ? "Update item details"
+                    : "Add a new item to inventory"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -261,7 +286,12 @@ export default function InventoryPage() {
                       <Input
                         id="name"
                         value={formData.name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
                         required
                       />
                     </div>
@@ -272,7 +302,12 @@ export default function InventoryPage() {
                       <select
                         id="category"
                         value={formData.category}
-                        onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as any }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            category: e.target.value as any,
+                          }))
+                        }
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="food">Food</option>
@@ -282,19 +317,27 @@ export default function InventoryPage() {
                       </select>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <label htmlFor="description" className="text-sm font-medium">
+                    <label
+                      htmlFor="description"
+                      className="text-sm font-medium"
+                    >
                       Description
                     </label>
                     <Input
                       id="description"
                       value={formData.description}
-                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          description: e.target.value,
+                        }))
+                      }
                       required
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <label htmlFor="price" className="text-sm font-medium">
@@ -306,7 +349,12 @@ export default function InventoryPage() {
                         step="0.01"
                         min="0"
                         value={formData.price}
-                        onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            price: parseFloat(e.target.value) || 0,
+                          }))
+                        }
                         required
                       />
                     </div>
@@ -319,12 +367,20 @@ export default function InventoryPage() {
                         type="number"
                         min="0"
                         value={formData.stock}
-                        onChange={(e) => setFormData(prev => ({ ...prev, stock: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            stock: parseInt(e.target.value) || 0,
+                          }))
+                        }
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <label htmlFor="isAvailable" className="text-sm font-medium">
+                      <label
+                        htmlFor="isAvailable"
+                        className="text-sm font-medium"
+                      >
                         Available
                       </label>
                       <div className="flex items-center pt-2">
@@ -332,10 +388,18 @@ export default function InventoryPage() {
                           id="isAvailable"
                           type="checkbox"
                           checked={formData.isAvailable}
-                          onChange={(e) => setFormData(prev => ({ ...prev, isAvailable: e.target.checked }))}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              isAvailable: e.target.checked,
+                            }))
+                          }
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                         />
-                        <label htmlFor="isAvailable" className="ml-2 text-sm text-gray-700">
+                        <label
+                          htmlFor="isAvailable"
+                          className="ml-2 text-sm text-gray-700"
+                        >
                           Item is available for ordering
                         </label>
                       </div>
@@ -350,14 +414,19 @@ export default function InventoryPage() {
                       id="image"
                       type="url"
                       value={formData.image}
-                      onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          image: e.target.value,
+                        }))
+                      }
                       placeholder="https://example.com/image.jpg"
                     />
                   </div>
 
                   <div className="flex gap-2">
                     <Button type="submit">
-                      {editingItem ? 'Update Item' : 'Add Item'}
+                      {editingItem ? "Update Item" : "Add Item"}
                     </Button>
                     <Button type="button" variant="outline" onClick={resetForm}>
                       Cancel
@@ -393,21 +462,31 @@ export default function InventoryPage() {
                       <TableCell>
                         <div>
                           <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-gray-500">{item.description}</div>
+                          <div className="text-sm text-gray-500">
+                            {item.description}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="capitalize">{item.category}</TableCell>
+                      <TableCell className="capitalize">
+                        {item.category}
+                      </TableCell>
                       <TableCell>${item.price.toFixed(2)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(item.stock)}`}>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(
+                              item.stock
+                            )}`}
+                          >
                             {item.stock}
                           </span>
                           <div className="flex gap-1">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleStockUpdate(item._id, item.stock + 1)}
+                              onClick={() =>
+                                handleStockUpdate(item._id, item.stock + 1)
+                              }
                               className="h-6 w-6 p-0"
                             >
                               +
@@ -415,7 +494,12 @@ export default function InventoryPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleStockUpdate(item._id, Math.max(0, item.stock - 1))}
+                              onClick={() =>
+                                handleStockUpdate(
+                                  item._id,
+                                  Math.max(0, item.stock - 1)
+                                )
+                              }
                               className="h-6 w-6 p-0"
                             >
                               -
@@ -424,10 +508,14 @@ export default function InventoryPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          item.isAvailable ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'
-                        }`}>
-                          {item.isAvailable ? 'Available' : 'Unavailable'}
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            item.isAvailable
+                              ? "text-green-600 bg-green-100"
+                              : "text-red-600 bg-red-100"
+                          }`}
+                        >
+                          {item.isAvailable ? "Available" : "Unavailable"}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -453,18 +541,20 @@ export default function InventoryPage() {
                   ))}
                 </TableBody>
               </Table>
-              
-              {!inventory || inventory.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  No inventory items found. Add your first item to get started.
-                </div>
-              )}
+
+              {!inventory ||
+                (inventory.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No inventory items found. Add your first item to get
+                    started.
+                  </div>
+                ))}
             </CardContent>
           </Card>
         </>
       )}
 
-      {activeTab === 'orders' && (
+      {activeTab === "orders" && (
         <Card>
           <CardHeader>
             <CardTitle>Customer Orders</CardTitle>
@@ -503,62 +593,76 @@ export default function InventoryPage() {
                     </TableCell>
                     <TableCell>${order.total.toFixed(2)}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(order.status)}`}>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
+                          order.status
+                        )}`}
+                      >
                         {order.status}
                       </span>
                     </TableCell>
                     <TableCell>{formatDateTime(order.orderedAt)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {order.status === 'pending' && (
+                        {order.status === "pending" && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleOrderStatusUpdate(order._id, 'preparing')}
+                            onClick={() =>
+                              handleOrderStatusUpdate(order._id, "preparing")
+                            }
                           >
                             Start
                           </Button>
                         )}
-                        {order.status === 'preparing' && (
+                        {order.status === "preparing" && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleOrderStatusUpdate(order._id, 'ready')}
+                            onClick={() =>
+                              handleOrderStatusUpdate(order._id, "ready")
+                            }
                           >
                             Ready
                           </Button>
                         )}
-                        {order.status === 'ready' && (
+                        {order.status === "ready" && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleOrderStatusUpdate(order._id, 'delivered')}
+                            onClick={() =>
+                              handleOrderStatusUpdate(order._id, "delivered")
+                            }
                           >
                             Deliver
                           </Button>
                         )}
-                        {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOrderStatusUpdate(order._id, 'cancelled')}
-                            className="text-red-600 hover:bg-red-50"
-                          >
-                            Cancel
-                          </Button>
-                        )}
+                        {order.status !== "delivered" &&
+                          order.status !== "cancelled" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleOrderStatusUpdate(order._id, "cancelled")
+                              }
+                              className="text-red-600 hover:bg-red-50"
+                            >
+                              Cancel
+                            </Button>
+                          )}
                       </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            
-            {!ordersResponse?.orders || ordersResponse.orders.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                No orders found.
-              </div>
-            )}
+
+            {!ordersResponse?.orders ||
+              (ordersResponse.orders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No orders found.
+                </div>
+              ))}
           </CardContent>
         </Card>
       )}

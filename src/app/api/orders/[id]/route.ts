@@ -4,11 +4,12 @@ import { Order } from '@/models';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 // GET /api/orders/[id] - Get order by ID
-async function getOrder(request: AuthenticatedRequest, { params }: { params: { id: string } }) {
+async function getOrder(request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB();
 
-    const order = await Order.findById(params.id)
+    const { id } = await params;
+    const order = await Order.findById(id)
       .populate('bookingId', 'customer deskId startTime endTime')
       .populate('items.itemId', 'name price category');
 
@@ -24,10 +25,11 @@ async function getOrder(request: AuthenticatedRequest, { params }: { params: { i
 }
 
 // PUT /api/orders/[id] - Update order
-async function updateOrder(request: AuthenticatedRequest, { params }: { params: { id: string } }) {
+async function updateOrder(request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB();
 
+    const { id } = await params;
     const body = await request.json();
     const { status, notes, deliveredAt } = body;
 
@@ -42,7 +44,7 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
     }
 
     const order = await Order.findByIdAndUpdate(
-      params.id,
+      id,
       updateData,
       { new: true, runValidators: true }
     )
@@ -61,11 +63,12 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
 }
 
 // DELETE /api/orders/[id] - Delete order
-async function deleteOrder(request: AuthenticatedRequest, { params }: { params: { id: string } }) {
+async function deleteOrder(request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB();
 
-    const order = await Order.findById(params.id);
+    const { id } = await params;
+    const order = await Order.findById(id);
 
     if (!order) {
       return ApiResponses.notFound('Order not found');
@@ -76,7 +79,7 @@ async function deleteOrder(request: AuthenticatedRequest, { params }: { params: 
       return ApiResponses.badRequest('Cannot delete order with status: ' + order.status);
     }
 
-    await Order.findByIdAndDelete(params.id);
+    await Order.findByIdAndDelete(id);
 
     return ApiResponses.success({ message: 'Order deleted successfully' });
   } catch (error) {

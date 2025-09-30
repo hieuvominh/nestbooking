@@ -1,16 +1,16 @@
 // MongoDB initialization script
-db = db.getSiblingDB('bookingcoo');
+db = db.getSiblingDB("bookingcoo");
 
 // Create a user for the application
 db.createUser({
-  user: 'app',
-  pwd: 'apppassword123',
+  user: "app",
+  pwd: "apppassword123",
   roles: [
     {
-      role: 'readWrite',
-      db: 'bookingcoo'
-    }
-  ]
+      role: "readWrite",
+      db: "bookingcoo",
+    },
+  ],
 });
 
 // Create indexes for better performance
@@ -23,4 +23,4 @@ db.inventoryItems.createIndex({ sku: 1 }, { unique: true });
 db.orders.createIndex({ bookingId: 1 });
 db.transactions.createIndex({ type: 1, date: -1 });
 
-print('Database initialized successfully');
+print("Database initialized successfully");

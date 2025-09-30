@@ -1,16 +1,17 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -18,26 +19,24 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 
 interface Booking {
   _id: string;
-  customerName: string;
-  customerEmail: string;
-  deskId: string;
-  deskNumber: number;
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  desk: {
+    label: string;
+    location?: string;
+  };
   startTime: string;
   endTime: string;
-  status: 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
+  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
   checkInTime?: string;
   signature?: string;
-  orders?: {
-    _id: string;
-    itemId: string;
-    itemName: string;
-    quantity: number;
-    price: number;
-  }[];
 }
 
 interface InventoryItem {
@@ -46,51 +45,72 @@ interface InventoryItem {
   description: string;
   price: number;
   stock: number;
-  category: 'food' | 'drinks' | 'snacks' | 'supplies';
+  category: "food" | "drinks" | "snacks" | "supplies";
   isAvailable: boolean;
   image?: string;
 }
 
-interface Order {
+interface CartItem {
   itemId: string;
   itemName: string;
   quantity: number;
   price: number;
 }
 
+interface OrderItem {
+  _id: string;
+  itemId: string;
+  itemName?: string; // Legacy field
+  name?: string; // Current field from API
+  quantity: number;
+  price: number;
+}
+
+interface ExistingOrder {
+  _id: string;
+  bookingId: string;
+  items: OrderItem[];
+  totalAmount: number;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function PublicBookingPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const bookingId = params.bookingId as string;
-  const token = searchParams.get('t');
-  
+  const token = searchParams.get("t");
+
   const [booking, setBooking] = useState<Booking | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [signature, setSignature] = useState('');
-  const [cart, setCart] = useState<Order[]>([]);
+  const [signature, setSignature] = useState("");
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
 
   useEffect(() => {
     fetchBookingData();
     fetchInventory();
-  }, [bookingId]);
+    fetchExistingOrders();
+  }, [bookingId, token]);
 
   const fetchBookingData = async () => {
     try {
       if (!token) {
-        throw new Error('Access token required');
+        throw new Error("Access token required");
       }
-      
+
       const response = await fetch(`/api/public/${bookingId}?t=${token}`);
       if (!response.ok) {
-        throw new Error('Booking not found or access denied');
+        throw new Error("Booking not found or access denied");
       }
       const data = await response.json();
       setBooking(data.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load booking');
+      setError(err instanceof Error ? err.message : "Failed to load booking");
     } finally {
       setLoading(false);
     }
@@ -98,65 +118,138 @@ export default function PublicBookingPage() {
 
   const fetchInventory = async () => {
     try {
-      const response = await fetch('/api/inventory');
+      const response = await fetch("/api/public/inventory");
       if (response.ok) {
         const data = await response.json();
-        setInventory(data.data.filter((item: InventoryItem) => item.isAvailable && item.stock > 0));
+        // The public endpoint returns allItems array
+        const items = data.data.allItems || [];
+        setInventory(
+          items.map((item: any) => ({
+            _id: item.id,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            stock: item.quantity,
+            category: item.category,
+            isAvailable: true,
+            image: item.imageUrl,
+          }))
+        );
+      } else {
+        console.error(
+          "Failed to fetch inventory:",
+          response.status,
+          response.statusText
+        );
       }
     } catch (err) {
-      console.error('Failed to load inventory:', err);
+      console.error("Failed to load inventory:", err);
+    }
+  };
+
+  const fetchExistingOrders = async () => {
+    try {
+      if (!token) {
+        console.log("fetchExistingOrders: No token available, skipping");
+        return;
+      }
+
+      console.log(
+        "fetchExistingOrders: Making request with token:",
+        token.substring(0, 20) + "..."
+      );
+      const response = await fetch(
+        `/api/public/${bookingId}/orders?t=${token}`
+      );
+      console.log("fetchExistingOrders: Response status:", response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          "fetchExistingOrders: Success, received orders:",
+          data.data?.length || 0
+        );
+        setExistingOrders(data.data || []);
+      } else {
+        console.error(
+          "Failed to fetch orders:",
+          response.status,
+          response.statusText
+        );
+        const errorData = await response.text();
+        console.error("Error response:", errorData);
+      }
+    } catch (err) {
+      console.error("Failed to load existing orders:", err);
     }
   };
 
   const handleCheckIn = async () => {
     if (!signature.trim()) {
-      alert('Please provide your signature to check in');
+      toast.error("Please provide your signature to check in");
       return;
     }
 
     try {
-      const response = await fetch(`/api/public/booking/${bookingId}/checkin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signature })
+      const response = await fetch(`/api/public/${bookingId}/checkin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          signature,
+          token,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Check-in failed');
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Check-in failed");
       }
 
       const data = await response.json();
       setBooking(data.data);
-      alert('Successfully checked in!');
+      toast.success("Successfully checked in!");
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Check-in failed');
+      toast.error(err instanceof Error ? err.message : "Check-in failed");
     }
   };
 
   const addToCart = (item: InventoryItem) => {
-    const existingItem = cart.find(cartItem => cartItem.itemId === item._id);
+    const existingItem = cart.find((cartItem) => cartItem.itemId === item._id);
     if (existingItem) {
       if (existingItem.quantity < item.stock) {
-        setCart(prev => prev.map(cartItem =>
-          cartItem.itemId === item._id
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        ));
+        setCart((prev) =>
+          prev.map((cartItem) =>
+            cartItem.itemId === item._id
+              ? { ...cartItem, quantity: cartItem.quantity + 1 }
+              : cartItem
+          )
+        );
+        toast.success(`Added another ${item.name} to cart`);
       } else {
-        alert('Not enough stock available');
+        toast.error("Not enough stock available");
       }
     } else {
-      setCart(prev => [...prev, {
-        itemId: item._id,
-        itemName: item.name,
-        quantity: 1,
-        price: item.price
-      }]);
+      setCart((prev) => [
+        ...prev,
+        {
+          itemId: item._id,
+          itemName: item.name,
+          quantity: 1,
+          price: item.price,
+        },
+      ]);
+      toast.success(`${item.name} added to cart`);
     }
   };
 
   const removeFromCart = (itemId: string) => {
-    setCart(prev => prev.filter(item => item.itemId !== itemId));
+    const item = cart.find((cartItem) => cartItem.itemId === itemId);
+    setCart((prev) => prev.filter((item) => item.itemId !== itemId));
+    if (item) {
+      toast.success(`${item.itemName} removed from cart`);
+    }
   };
 
   const updateCartQuantity = (itemId: string, quantity: number) => {
@@ -165,41 +258,62 @@ export default function PublicBookingPage() {
       return;
     }
 
-    const inventoryItem = inventory.find(item => item._id === itemId);
+    const inventoryItem = inventory.find((item) => item._id === itemId);
     if (inventoryItem && quantity > inventoryItem.stock) {
-      alert('Not enough stock available');
+      toast.error(
+        `Only ${inventoryItem.stock} ${inventoryItem.name}(s) available`
+      );
       return;
     }
 
-    setCart(prev => prev.map(item =>
-      item.itemId === itemId ? { ...item, quantity } : item
-    ));
+    setCart((prev) =>
+      prev.map((item) =>
+        item.itemId === itemId ? { ...item, quantity } : item
+      )
+    );
   };
 
   const submitOrder = async () => {
     if (cart.length === 0) {
-      alert('Your cart is empty');
+      toast.error("Your cart is empty");
+      return;
+    }
+
+    if (!token) {
+      toast.error("Authentication required");
       return;
     }
 
     setOrderLoading(true);
     try {
-      const response = await fetch(`/api/public/booking/${bookingId}/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cart })
+      const response = await fetch(`/api/public/${bookingId}/orders`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: cart.map((item) => ({
+            sku: item.itemId,
+            quantity: item.quantity,
+          })),
+          bookingId,
+          token,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit order');
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to submit order");
       }
 
       const data = await response.json();
-      setBooking(data.data);
       setCart([]);
-      alert('Order submitted successfully!');
+      fetchExistingOrders(); // Refresh orders list
+      toast.success("Order placed successfully!");
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to submit order');
+      toast.error(
+        err instanceof Error ? err.message : "Failed to submit order"
+      );
     } finally {
       setOrderLoading(false);
     }
@@ -210,11 +324,14 @@ export default function PublicBookingPage() {
   };
 
   const getCartTotal = () => {
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
   };
 
   const getOrdersTotal = () => {
-    return booking?.orders?.reduce((total, order) => total + (order.price * order.quantity), 0) || 0;
+    return existingOrders.reduce(
+      (total: number, order: ExistingOrder) => total + (order.totalAmount || 0),
+      0
+    );
   };
 
   if (loading) {
@@ -236,7 +353,7 @@ export default function PublicBookingPage() {
             <CardTitle className="text-red-600">Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600">{error || 'Booking not found'}</p>
+            <p className="text-gray-600">{error || "Booking not found"}</p>
           </CardContent>
         </Card>
       </div>
@@ -261,38 +378,57 @@ export default function PublicBookingPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-600">Customer Name</label>
-                <p className="text-lg font-semibold">{booking.customerName}</p>
+                <label className="text-sm font-medium text-gray-600">
+                  Customer Name
+                </label>
+                <p className="text-lg font-semibold">{booking.customer.name}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Email</label>
-                <p className="text-lg">{booking.customerEmail}</p>
+                <label className="text-sm font-medium text-gray-600">
+                  Email
+                </label>
+                <p className="text-lg">{booking.customer.email}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Desk Number</label>
-                <p className="text-lg font-semibold">Desk {booking.deskNumber}</p>
+                <label className="text-sm font-medium text-gray-600">
+                  Desk
+                </label>
+                <p className="text-lg font-semibold">{booking.desk.label}</p>
+                {booking.desk.location && (
+                  <p className="text-sm text-gray-500">
+                    {booking.desk.location}
+                  </p>
+                )}
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Status</label>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                  booking.status === 'confirmed' ? 'bg-blue-100 text-blue-600' :
-                  booking.status === 'checked-in' ? 'bg-green-100 text-green-600' :
-                  booking.status === 'completed' ? 'bg-gray-100 text-gray-600' :
-                  'bg-yellow-100 text-yellow-600'
-                }`}>
+                <label className="text-sm font-medium text-gray-600">
+                  Status
+                </label>
+                <span
+                  className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                    booking.status === "confirmed"
+                      ? "bg-blue-100 text-blue-600"
+                      : booking.status === "checked-in"
+                      ? "bg-green-100 text-green-600"
+                      : booking.status === "completed"
+                      ? "bg-gray-100 text-gray-600"
+                      : "bg-yellow-100 text-yellow-600"
+                  }`}
+                >
                   {booking.status}
                 </span>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Start Time</label>
-                <p className="text-lg">{formatDateTime(booking.startTime)}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">End Time</label>
-                <p className="text-lg">{formatDateTime(booking.endTime)}</p>
+                <label className="text-sm font-medium text-gray-600">
+                  Time Range
+                </label>
+                <p className="text-lg">
+                  {formatDateTime(booking.startTime)} →{" "}
+                  {formatDateTime(booking.endTime)}
+                </p>
               </div>
             </div>
-            
+
             {booking.checkInTime && (
               <div className="mt-4 p-4 bg-green-50 rounded-lg">
                 <p className="text-green-800">
@@ -309,15 +445,20 @@ export default function PublicBookingPage() {
         </Card>
 
         {/* Check-in Section */}
-        {booking.status === 'confirmed' && !booking.checkInTime && (
+        {booking.status === "confirmed" && !booking.checkInTime && (
           <Card>
             <CardHeader>
               <CardTitle>Check In</CardTitle>
-              <CardDescription>Please provide your signature to check in</CardDescription>
+              <CardDescription>
+                Please provide your signature to check in
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label htmlFor="signature" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="signature"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Your Signature
                 </label>
                 <Input
@@ -336,48 +477,112 @@ export default function PublicBookingPage() {
         )}
 
         {/* Food Ordering Section */}
-        {(booking.status === 'confirmed' || booking.status === 'checked-in') && (
+        {(booking.status === "confirmed" ||
+          booking.status === "checked-in") && (
           <>
             <Card>
               <CardHeader>
-                <CardTitle>Order Food & Drinks</CardTitle>
-                <CardDescription>Browse our menu and place your order</CardDescription>
+                <CardTitle>Order Food & Items</CardTitle>
+                <CardDescription>
+                  Browse our menu and place your order
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {inventory.map((item) => (
-                    <div key={item._id} className="border rounded-lg p-4 space-y-3">
-                      {item.image && (
-                        <img 
-                          src={item.image} 
-                          alt={item.name}
-                          className="w-full h-32 object-cover rounded"
-                        />
-                      )}
-                      <div>
-                        <h3 className="font-semibold">{item.name}</h3>
-                        <p className="text-sm text-gray-600">{item.description}</p>
-                        <p className="text-sm text-gray-500 capitalize">{item.category}</p>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-lg font-bold">${item.price.toFixed(2)}</span>
-                        <span className="text-sm text-gray-500">Stock: {item.stock}</span>
-                      </div>
-                      <Button 
-                        onClick={() => addToCart(item)}
-                        className="w-full"
-                        disabled={item.stock === 0}
+                  {inventory.map((item) => {
+                    const cartItem = cart.find(
+                      (cartItem) => cartItem.itemId === item._id
+                    );
+                    const cartQuantity = cartItem ? cartItem.quantity : 0;
+                    const maxQuantity = item.stock - cartQuantity;
+
+                    return (
+                      <div
+                        key={item._id}
+                        className="border rounded-lg p-4 space-y-3 bg-white hover:shadow-md transition-shadow"
                       >
-                        Add to Cart
-                      </Button>
-                    </div>
-                  ))}
+                        {item.image && (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-full h-32 object-cover rounded"
+                          />
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-lg">{item.name}</h3>
+                          <p className="text-sm text-gray-600">
+                            {item.description}
+                          </p>
+                          <div className="flex items-center justify-start mt-2">
+                            <span className="text-sm text-gray-500 capitalize bg-gray-100 px-2 py-1 rounded">
+                              {item.category}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xl font-bold text-green-600">
+                            ${item.price.toFixed(2)}
+                          </span>
+                          {cartQuantity > 0 && (
+                            <span className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                              {cartQuantity} in cart
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => addToCart(item)}
+                            className="flex-1"
+                            disabled={maxQuantity === 0}
+                            variant={
+                              maxQuantity === 0 ? "secondary" : "default"
+                            }
+                          >
+                            {maxQuantity === 0 ? "Out of Stock" : "Add to Cart"}
+                          </Button>
+                          {cartQuantity > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartQuantity(item._id, cartQuantity - 1)
+                                }
+                                className="h-9 w-9 p-0"
+                              >
+                                -
+                              </Button>
+                              <span className="w-8 text-center text-sm">
+                                {cartQuantity}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartQuantity(item._id, cartQuantity + 1)
+                                }
+                                className="h-9 w-9 p-0"
+                                disabled={maxQuantity === 0}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                
+
                 {inventory.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">
-                    No items available for ordering at the moment.
-                  </p>
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 text-lg">
+                      No items available for ordering at the moment.
+                    </p>
+                    <p className="text-gray-400 text-sm mt-2">
+                      Please check back later or contact staff for assistance.
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -387,7 +592,9 @@ export default function PublicBookingPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Your Order</CardTitle>
-                  <CardDescription>Review your items before placing order</CardDescription>
+                  <CardDescription>
+                    Review your items before placing order
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -410,23 +617,37 @@ export default function PublicBookingPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => updateCartQuantity(item.itemId, item.quantity - 1)}
+                                onClick={() =>
+                                  updateCartQuantity(
+                                    item.itemId,
+                                    item.quantity - 1
+                                  )
+                                }
                                 className="h-6 w-6 p-0"
                               >
                                 -
                               </Button>
-                              <span className="w-8 text-center">{item.quantity}</span>
+                              <span className="w-8 text-center">
+                                {item.quantity}
+                              </span>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => updateCartQuantity(item.itemId, item.quantity + 1)}
+                                onClick={() =>
+                                  updateCartQuantity(
+                                    item.itemId,
+                                    item.quantity + 1
+                                  )
+                                }
                                 className="h-6 w-6 p-0"
                               >
                                 +
                               </Button>
                             </div>
                           </TableCell>
-                          <TableCell>${(item.price * item.quantity).toFixed(2)}</TableCell>
+                          <TableCell>
+                            ${(item.price * item.quantity).toFixed(2)}
+                          </TableCell>
                           <TableCell>
                             <Button
                               size="sm"
@@ -445,12 +666,12 @@ export default function PublicBookingPage() {
                     <span className="text-lg font-semibold">
                       Total: ${getCartTotal().toFixed(2)}
                     </span>
-                    <Button 
+                    <Button
                       onClick={submitOrder}
                       disabled={orderLoading}
                       className="min-w-32"
                     >
-                      {orderLoading ? 'Placing Order...' : 'Place Order'}
+                      {orderLoading ? "Placing Order..." : "Place Order"}
                     </Button>
                   </div>
                 </CardContent>
@@ -460,33 +681,79 @@ export default function PublicBookingPage() {
         )}
 
         {/* Previous Orders */}
-        {booking.orders && booking.orders.length > 0 && (
+        {existingOrders.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Your Orders</CardTitle>
               <CardDescription>Previously placed orders</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {booking.orders.map((order, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{order.itemName}</TableCell>
-                      <TableCell>${order.price.toFixed(2)}</TableCell>
-                      <TableCell>{order.quantity}</TableCell>
-                      <TableCell>${(order.price * order.quantity).toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {existingOrders.map((order) => (
+                <div key={order._id} className="mb-6 p-4 border rounded-lg">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-semibold">
+                      Order #{order._id.slice(-8)}
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`px-2 py-1 rounded text-sm ${
+                          order.status === "confirmed"
+                            ? "bg-blue-100 text-blue-600"
+                            : order.status === "completed"
+                            ? "bg-green-100 text-green-600"
+                            : order.status === "cancelled"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-yellow-100 text-yellow-600"
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                      <span className="font-semibold">
+                        ${(order.totalAmount || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Item</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {order.items?.map((item) => (
+                        <TableRow key={item._id}>
+                          <TableCell>
+                            {item.name || item.itemName || "Unknown Item"}
+                          </TableCell>
+                          <TableCell>${(item.price || 0).toFixed(2)}</TableCell>
+                          <TableCell>{item.quantity || 0}</TableCell>
+                          <TableCell>
+                            $
+                            {((item.price || 0) * (item.quantity || 0)).toFixed(
+                              2
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )) || (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="text-center text-gray-500"
+                          >
+                            No items found in this order
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Ordered on {formatDateTime(order.createdAt)}
+                  </p>
+                </div>
+              ))}
               <div className="mt-4 text-right">
                 <span className="text-lg font-semibold">
                   Total Spent: ${getOrdersTotal().toFixed(2)}

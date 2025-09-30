@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { 
-  ChevronDown, 
-  ChevronRight, 
+import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import {
+  ChevronDown,
+  ChevronRight,
   LayoutDashboard,
   Calendar,
   ShoppingCart,
@@ -17,8 +17,8 @@ import {
   Monitor,
   Package,
   LogOut,
-  Building2
-} from 'lucide-react';
+  Building2,
+} from "lucide-react";
 
 export default function AdminLayout({
   children,
@@ -31,14 +31,17 @@ export default function AdminLayout({
   const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/admin/login') {
-      router.push('/admin/login');
+    if (!isLoading && !user && pathname !== "/admin/login") {
+      router.push("/admin/login");
     }
   }, [user, isLoading, router, pathname]);
 
   useEffect(() => {
     // Auto-expand settings if we're on a settings page
-    if (pathname === '/admin/settings/desks' || pathname === '/admin/settings/inventory') {
+    if (
+      pathname === "/admin/settings/desks" ||
+      pathname === "/admin/settings/inventory"
+    ) {
       setSettingsExpanded(true);
     }
   }, [pathname]);
@@ -51,24 +54,24 @@ export default function AdminLayout({
     );
   }
 
-  if (!user && pathname !== '/admin/login') {
+  if (!user && pathname !== "/admin/login") {
     return null;
   }
 
-  if (pathname === '/admin/login') {
+  if (pathname === "/admin/login") {
     return <>{children}</>;
   }
 
   const navigation = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Bookings', href: '/admin/bookings', icon: Calendar },
-    { name: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-    { name: 'Transactions', href: '/admin/transactions', icon: CreditCard },
+    { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+    { name: "Bookings", href: "/admin/bookings", icon: Calendar },
+    { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
+    { name: "Transactions", href: "/admin/transactions", icon: CreditCard },
   ];
 
   const settingsNavigation = [
-    { name: 'Desks', href: '/admin/settings/desks', icon: Monitor },
-    { name: 'Inventory', href: '/admin/settings/inventory', icon: Package },
+    { name: "Desks", href: "/admin/settings/desks", icon: Monitor },
+    { name: "Inventory", href: "/admin/settings/inventory", icon: Package },
   ];
 
   return (
@@ -82,7 +85,7 @@ export default function AdminLayout({
             <h1 className="text-xl font-bold text-white">BookingCoo</h1>
           </div>
         </div>
-        
+
         {/* Navigation - flex-1 to take up available space */}
         <nav className="flex-1 mt-8 px-4 overflow-y-auto">
           <div className="space-y-2">
@@ -95,16 +98,22 @@ export default function AdminLayout({
                   href={item.href}
                   className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActive
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25'
-                      : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm'
+                      ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25"
+                      : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm"
                   }`}
                 >
-                  <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-700'}`} />
+                  <Icon
+                    className={`mr-3 h-5 w-5 ${
+                      isActive
+                        ? "text-white"
+                        : "text-slate-500 group-hover:text-slate-700"
+                    }`}
+                  />
                   {item.name}
                 </Link>
               );
             })}
-            
+
             {/* Settings Section */}
             <div className="pt-6">
               <div className="pb-2">
@@ -115,30 +124,40 @@ export default function AdminLayout({
               <button
                 onClick={() => setSettingsExpanded(!settingsExpanded)}
                 className={`group flex items-center justify-between w-full px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
-                  pathname.startsWith('/admin/settings/')
-                    ? 'bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-md shadow-slate-500/25'
-                    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm'
+                  pathname.startsWith("/admin/settings/")
+                    ? "bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-md shadow-slate-500/25"
+                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm"
                 }`}
               >
                 <div className="flex items-center">
-                  <Settings className={`mr-3 h-5 w-5 ${
-                    pathname.startsWith('/admin/settings/') 
-                      ? 'text-white' 
-                      : 'text-slate-500 group-hover:text-slate-700'
-                  }`} />
+                  <Settings
+                    className={`mr-3 h-5 w-5 ${
+                      pathname.startsWith("/admin/settings/")
+                        ? "text-white"
+                        : "text-slate-500 group-hover:text-slate-700"
+                    }`}
+                  />
                   <span>Settings</span>
                 </div>
                 {settingsExpanded ? (
-                  <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${
-                    pathname.startsWith('/admin/settings/') ? 'text-white' : 'text-slate-500'
-                  }`} />
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform duration-200 ${
+                      pathname.startsWith("/admin/settings/")
+                        ? "text-white"
+                        : "text-slate-500"
+                    }`}
+                  />
                 ) : (
-                  <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
-                    pathname.startsWith('/admin/settings/') ? 'text-white' : 'text-slate-500'
-                  }`} />
+                  <ChevronRight
+                    className={`h-4 w-4 transition-transform duration-200 ${
+                      pathname.startsWith("/admin/settings/")
+                        ? "text-white"
+                        : "text-slate-500"
+                    }`}
+                  />
                 )}
               </button>
-              
+
               {settingsExpanded && (
                 <div className="mt-2 space-y-1 animate-in slide-in-from-top-1 duration-200">
                   {settingsNavigation.map((item) => {
@@ -150,13 +169,17 @@ export default function AdminLayout({
                         href={item.href}
                         className={`group flex items-center pl-6 pr-3 py-2.5 text-sm rounded-lg transition-all duration-200 ${
                           isActive
-                            ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            ? "bg-blue-50 text-blue-700 border-r-2 border-blue-500"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                         }`}
                       >
-                        <Icon className={`mr-3 h-4 w-4 ${
-                          isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'
-                        }`} />
+                        <Icon
+                          className={`mr-3 h-4 w-4 ${
+                            isActive
+                              ? "text-blue-600"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
                         {item.name}
                       </Link>
                     );
@@ -166,7 +189,7 @@ export default function AdminLayout({
             </div>
           </div>
         </nav>
-        
+
         {/* User section at bottom - flex-shrink-0 to prevent shrinking */}
         <div className="flex-shrink-0 p-4 border-t border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100">
           <div className="flex items-center justify-between">
@@ -175,13 +198,17 @@ export default function AdminLayout({
                 <Users className="h-5 w-5 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-slate-800">{user?.name}</span>
-                <span className="text-xs text-slate-500 capitalize">{user?.role}</span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {user?.name}
+                </span>
+                <span className="text-xs text-slate-500 capitalize">
+                  {user?.role}
+                </span>
               </div>
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={logout}
               className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
             >
@@ -194,9 +221,7 @@ export default function AdminLayout({
       {/* Main content - add margin-left to account for fixed sidebar */}
       <div className="flex-1 ml-64 overflow-auto">
         <main className="p-8">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
     </div>

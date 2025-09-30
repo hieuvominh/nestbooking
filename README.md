@@ -5,19 +5,21 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
 ## Features
 
 ### Admin Dashboard
+
 - **Authentication**: Secure login/logout with JWT and bcrypt
 - **Desk Management**: Manage up to 30 desks with status tracking (available, reserved, occupied, maintenance)
-- **Booking Management**: 
+- **Booking Management**:
   - Create/edit/cancel bookings with customer information
   - Prevent double-booking with availability checking
   - Generate public booking URLs with JWT signatures
 - **Transaction Tracking**: Daily & monthly income/expense reporting with charts
-- **Inventory Management**: 
+- **Inventory Management**:
   - CRUD operations for stock items (food/merchandise)
   - Low-stock alerts and quantity tracking
   - Stock in/out actions
 
 ### Public Booking Interface
+
 - **QR Code Access**: Secure public URLs with signed JWT tokens
 - **Check-in System**: Time-based check-in functionality
 - **Food Ordering**: Cart system for ordering from available inventory
@@ -37,6 +39,7 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 20+
 - MongoDB (or use Docker Compose)
 - Docker & Docker Compose (optional)
@@ -44,6 +47,7 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
 ### Local Development
 
 1. **Clone and install dependencies**:
+
    ```bash
    git clone <your-repo>
    cd bookingcoo
@@ -51,10 +55,13 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
    ```
 
 2. **Set up environment variables**:
+
    ```bash
    cp .env.local.example .env.local
    ```
+
    Edit `.env.local` with your configuration:
+
    ```env
    MONGODB_URI=mongodb://localhost:27017/bookingcoo
    JWT_SECRET=your-super-secret-jwt-key
@@ -64,12 +71,15 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
    ```
 
 3. **Start with Docker Compose** (recommended):
+
    ```bash
    npm run docker:up
    ```
+
    This starts both MongoDB and the Next.js app.
 
 4. **Or start manually**:
+
    ```bash
    # Start MongoDB separately, then:
    npm run dev
@@ -81,13 +91,16 @@ A full-stack web application built with Next.js 13+ App Router, TypeScript, Mong
    ```
 
 ### Default Admin Credentials
+
 After seeding:
+
 - **Admin**: `admin@bookingcoo.com` / `admin123`
 - **Staff**: `staff@bookingcoo.com` / `staff123`
 
 ## Database Schema
 
 ### Collections
+
 - **users**: Admin/staff/customer accounts
 - **desks**: Workspace desk information
 - **bookings**: Booking records with customer info

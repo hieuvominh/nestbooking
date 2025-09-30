@@ -1,19 +1,38 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useApi } from '@/hooks/useApi';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Copy, Plus, QrCode } from 'lucide-react';
-import { QRCodeCanvas as QRCode } from 'qrcode.react';
-import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useApi } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Copy, Plus, QrCode, Trash2 } from "lucide-react";
+import { QRCodeCanvas as QRCode } from "qrcode.react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Booking {
   _id: string;
@@ -26,9 +45,9 @@ interface Booking {
   deskNumber: number;
   startTime: string;
   endTime: string;
-  status: 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
+  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
-  paymentStatus: 'pending' | 'paid' | 'refunded';
+  paymentStatus: "pending" | "paid" | "refunded";
   paymentMethod?: string;
   publicToken?: string;
   signature?: string;
@@ -43,23 +62,54 @@ interface InventoryItem {
   name: string;
   category: string;
   price: number;
-  stock: number;
-  status: 'available' | 'out-of-stock' | 'discontinued';
+  quantity: number;
+  isActive: boolean;
 }
 
 interface Order {
   _id: string;
-  bookingId: string;
+  bookingId: {
+    _id: string;
+    customer: {
+      name: string;
+      email: string;
+    };
+    deskId: string;
+  };
   items: Array<{
-    itemId: string;
+    itemId: {
+      _id: string;
+      name: string;
+      price: number;
+    };
     name: string;
     price: number;
     quantity: number;
+    subtotal: number;
   }>;
-  totalAmount: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  total: number;
+  status:
+    | "pending"
+    | "confirmed"
+    | "preparing"
+    | "ready"
+    | "delivered"
+    | "cancelled";
+  notes?: string;
+  orderedAt: string;
+  deliveredAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface OrdersResponse {
+  orders: Order[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
 }
 
 export default function BookingDetailPage() {
@@ -67,46 +117,59 @@ export default function BookingDetailPage() {
   const router = useRouter();
   const bookingId = params.id as string;
 
-  const [selectedItem, setSelectedItem] = useState<string>('');
+  const [selectedItem, setSelectedItem] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
 
+  // Cart state for multiple items
+  const [cart, setCart] = useState<
+    Array<{
+      itemId: string;
+      name: string;
+      price: number;
+      quantity: number;
+    }>
+  >([]);
+
   // API hooks
-  const { 
-    data: booking, 
-    isLoading: bookingLoading, 
+  const {
+    data: booking,
+    isLoading: bookingLoading,
     error: bookingError,
-    mutate: mutateBooking
+    mutate: mutateBooking,
   } = useApi<Booking>(`/api/bookings/${bookingId}`);
 
-  const { 
-    data: inventory, 
-    isLoading: inventoryLoading 
-  } = useApi<InventoryItem[]>('/api/inventory');
+  const { data: inventory, isLoading: inventoryLoading } =
+    useApi<InventoryItem[]>("/api/inventory");
 
-  const { 
-    data: orders, 
+  const {
+    data: ordersResponse,
     isLoading: ordersLoading,
-    mutate: mutateOrders
-  } = useApi<Order[]>(`/api/public/${bookingId}/orders`);
+    mutate: mutateOrders,
+  } = useApi<OrdersResponse>(`/api/orders?bookingId=${bookingId}`);
+
+  const { apiCall } = useApi();
+
+  const orders = ordersResponse?.orders || [];
 
   // Auto-generate token if booking exists and doesn't have a valid token
   useEffect(() => {
     const isTokenValid = (token: string) => {
       try {
         // Simple JWT payload decode to check expiration
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const payload = JSON.parse(atob(token.split(".")[1]));
         return payload.exp > Math.floor(Date.now() / 1000);
       } catch {
         return false;
       }
     };
 
-    if (booking && booking.status !== 'cancelled') {
-      const hasValidToken = (booking.publicToken && isTokenValid(booking.publicToken)) || 
-                           (booking.signature && isTokenValid(booking.signature));
-      
+    if (booking && booking.status !== "cancelled") {
+      const hasValidToken =
+        (booking.publicToken && isTokenValid(booking.publicToken)) ||
+        (booking.signature && isTokenValid(booking.signature));
+
       if (!hasValidToken) {
         generateNewToken();
       }
@@ -119,57 +182,60 @@ export default function BookingDetailPage() {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'confirmed': 'bg-blue-100 text-blue-800',
-      'checked-in': 'bg-green-100 text-green-800',
-      'completed': 'bg-gray-100 text-gray-800',
-      'cancelled': 'bg-red-100 text-red-800',
+      pending: "bg-yellow-100 text-yellow-800",
+      confirmed: "bg-blue-100 text-blue-800",
+      "checked-in": "bg-green-100 text-green-800",
+      completed: "bg-gray-100 text-gray-800",
+      cancelled: "bg-red-100 text-red-800",
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800";
   };
 
   const getPaymentStatusColor = (status: string) => {
     const colors = {
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'paid': 'bg-green-100 text-green-800',
-      'refunded': 'bg-red-100 text-red-800',
+      pending: "bg-yellow-100 text-yellow-800",
+      paid: "bg-green-100 text-green-800",
+      refunded: "bg-red-100 text-red-800",
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800";
   };
 
   const generatePublicUrl = () => {
     if (!booking?.publicToken && !booking?.signature) {
-      return '';
+      return "";
     }
-    
+
     const token = booking.signature || booking.publicToken;
     return `${window.location.origin}/p/${bookingId}?t=${token}`;
   };
 
   const generateNewToken = async () => {
     try {
-      const response = await fetch(`/api/bookings/${bookingId}/generate-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('bookingcoo_token')}`,
-        },
-      });
+      const response = await fetch(
+        `/api/bookings/${bookingId}/generate-token`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("bookingcoo_token")}`,
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to generate token');
+        throw new Error("Failed to generate token");
       }
 
       const data = await response.json();
-      toast.success('Public token generated successfully!');
-      
+      toast.success("Public token generated successfully!");
+
       // Update the booking data with the new token
       mutateBooking();
-      
+
       return data.publicUrl;
     } catch (error) {
-      toast.error('Failed to generate public token');
-      return '';
+      toast.error("Failed to generate public token");
+      return "";
     }
   };
 
@@ -177,54 +243,159 @@ export default function BookingDetailPage() {
     const url = generatePublicUrl();
     if (url) {
       navigator.clipboard.writeText(url);
-      toast.success('Public URL copied to clipboard!');
+      toast.success("Public URL copied to clipboard!");
     }
   };
 
-  const handleAddOrder = async () => {
+  const addItemToCart = () => {
     if (!selectedItem || quantity < 1) {
-      toast.error('Please select an item and specify quantity');
+      toast.error("Please select an item and specify quantity");
       return;
     }
 
-    const item = inventory?.find(i => i._id === selectedItem);
+    const item = inventory?.find((i) => i._id === selectedItem);
     if (!item) {
-      toast.error('Selected item not found');
+      toast.error("Selected item not found");
       return;
     }
 
-    if (item.stock < quantity) {
-      toast.error('Insufficient stock available');
+    if (item.quantity < quantity) {
+      toast.error("Insufficient stock available");
       return;
     }
+
+    // Check if item already in cart
+    const existingItemIndex = cart.findIndex(
+      (cartItem) => cartItem.itemId === selectedItem
+    );
+
+    if (existingItemIndex >= 0) {
+      // Update existing item quantity
+      const updatedCart = [...cart];
+      updatedCart[existingItemIndex].quantity += quantity;
+      setCart(updatedCart);
+    } else {
+      // Add new item to cart
+      setCart([
+        ...cart,
+        {
+          itemId: selectedItem,
+          name: item.name,
+          price: item.price,
+          quantity: quantity,
+        },
+      ]);
+    }
+
+    setSelectedItem("");
+    setQuantity(1);
+    toast.success("Item added to cart!");
+  };
+
+  const removeItemFromCart = (itemId: string) => {
+    setCart(cart.filter((item) => item.itemId !== itemId));
+  };
+
+  const updateCartItemQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeItemFromCart(itemId);
+      return;
+    }
+
+    setCart(
+      cart.map((item) =>
+        item.itemId === itemId ? { ...item, quantity: newQuantity } : item
+      )
+    );
+  };
+
+  const getCartTotal = () => {
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  };
+
+  const clearCart = () => {
+    setCart([]);
+  };
+
+  const handleSubmitOrder = async () => {
+    if (cart.length === 0) {
+      toast.error("Please add items to cart before submitting");
+      return;
+    }
+
+    const orderData = {
+      bookingId: bookingId,
+      items: cart.map((cartItem) => ({
+        itemId: cartItem.itemId,
+        name: cartItem.name,
+        price: cartItem.price,
+        quantity: cartItem.quantity,
+        subtotal: cartItem.price * cartItem.quantity,
+      })),
+    };
+
+    console.log("Submitting order data:", orderData);
 
     try {
-      const response = await fetch(`/api/public/${bookingId}/orders`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          items: [{
-            itemId: selectedItem,
-            name: item.name,
-            price: item.price,
-            quantity
-          }]
-        }),
+      await apiCall("/api/orders", {
+        method: "POST",
+        body: orderData,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to add order');
-      }
-
-      toast.success('Order added successfully!');
-      setSelectedItem('');
-      setQuantity(1);
+      toast.success("Order added successfully!");
+      clearCart();
       setIsOrderDialogOpen(false);
       mutateOrders();
     } catch (error) {
-      toast.error('Failed to add order');
+      console.error("Error submitting order:", error);
+      toast.error("Failed to submit order");
+    }
+  };
+
+  const handleStatusChange = async (orderId: string, newStatus: string) => {
+    try {
+      await apiCall(`/api/orders/${orderId}`, {
+        method: "PUT",
+        body: { status: newStatus },
+      });
+      mutateOrders();
+      toast.success("Order status updated successfully!");
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      toast.error("Failed to update order status");
+    }
+  };
+
+  const handleBookingStatusChange = async (newStatus: string) => {
+    try {
+      await apiCall(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        body: { status: newStatus },
+      });
+      mutateBooking();
+      toast.success("Booking status updated successfully!");
+    } catch (error) {
+      console.error("Error updating booking status:", error);
+      toast.error("Failed to update booking status");
+    }
+  };
+
+  const getOrderStatusColor = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "text-yellow-600 bg-yellow-100";
+      case "confirmed":
+        return "text-blue-600 bg-blue-100";
+      case "preparing":
+        return "text-orange-600 bg-orange-100";
+      case "ready":
+        return "text-green-600 bg-green-100";
+      case "delivered":
+        return "text-gray-600 bg-gray-100";
+      case "cancelled":
+        return "text-red-600 bg-red-100";
+      default:
+        return "text-gray-600 bg-gray-100";
     }
   };
 
@@ -239,7 +410,9 @@ export default function BookingDetailPage() {
   if (bookingError || !booking) {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <div className="text-lg text-red-600">Failed to load booking details</div>
+        <div className="text-lg text-red-600">
+          Failed to load booking details
+        </div>
         <Button onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Go Back
@@ -277,15 +450,21 @@ export default function BookingDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium text-gray-500">Name</Label>
+                <Label className="text-sm font-medium text-gray-500">
+                  Name
+                </Label>
                 <p className="text-lg font-semibold">{booking.customer.name}</p>
               </div>
               <div>
-                <Label className="text-sm font-medium text-gray-500">Email</Label>
+                <Label className="text-sm font-medium text-gray-500">
+                  Email
+                </Label>
                 <p>{booking.customer.email}</p>
               </div>
               <div>
-                <Label className="text-sm font-medium text-gray-500">Phone</Label>
+                <Label className="text-sm font-medium text-gray-500">
+                  Phone
+                </Label>
                 <p>{booking.customer.phone}</p>
               </div>
             </CardContent>
@@ -298,37 +477,69 @@ export default function BookingDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium text-gray-500">Desk</Label>
-                <p className="text-lg font-semibold">Desk {booking.deskNumber}</p>
+                <Label className="text-sm font-medium text-gray-500">
+                  Desk
+                </Label>
+                <p className="text-lg font-semibold">
+                  Desk {booking.deskNumber}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Start Time</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Start Time
+                  </Label>
                   <p>{formatDateTime(booking.startTime)}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">End Time</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    End Time
+                  </Label>
                   <p>{formatDateTime(booking.endTime)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Status</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Status
+                  </Label>
                   <div className="mt-1">
-                    <Badge className={getStatusColor(booking.status)}>
-                      {booking.status}
-                    </Badge>
+                    <select
+                      value={booking.status}
+                      onChange={(e) =>
+                        handleBookingStatusChange(e.target.value)
+                      }
+                      className={`w-full px-3 py-2 rounded-md text-sm font-medium border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${getStatusColor(
+                        booking.status
+                      )}`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="checked-in">Checked In</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
                   </div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Check-in</Label>
-                  <p>{booking.checkedInAt ? formatDateTime(booking.checkedInAt) : 'Not checked in'}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Check-in
+                  </Label>
+                  <p>
+                    {booking.checkedInAt
+                      ? formatDateTime(booking.checkedInAt)
+                      : "Not checked in"}
+                  </p>
                 </div>
               </div>
               {booking.notes && (
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Notes</Label>
-                  <p className="text-sm bg-gray-50 p-3 rounded-md">{booking.notes}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Notes
+                  </Label>
+                  <p className="text-sm bg-gray-50 p-3 rounded-md">
+                    {booking.notes}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -342,13 +553,21 @@ export default function BookingDetailPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Total Amount</Label>
-                  <p className="text-lg font-bold">${booking.totalAmount?.toFixed(2) || '0.00'}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Total Amount
+                  </Label>
+                  <p className="text-lg font-bold">
+                    ${booking.totalAmount?.toFixed(2) || "0.00"}
+                  </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Payment Status</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Payment Status
+                  </Label>
                   <div className="mt-1">
-                    <Badge className={getPaymentStatusColor(booking.paymentStatus)}>
+                    <Badge
+                      className={getPaymentStatusColor(booking.paymentStatus)}
+                    >
                       {booking.paymentStatus}
                     </Badge>
                   </div>
@@ -356,7 +575,9 @@ export default function BookingDetailPage() {
               </div>
               {booking.paymentMethod && (
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Payment Method</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Payment Method
+                  </Label>
                   <p>{booking.paymentMethod}</p>
                 </div>
               )}
@@ -381,12 +602,15 @@ export default function BookingDetailPage() {
                     QR URL: {publicUrl}
                   </div>
                   <div className="flex justify-center">
-                    <Dialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen}>
+                    <Dialog
+                      open={isQrDialogOpen}
+                      onOpenChange={setIsQrDialogOpen}
+                    >
                       <DialogTrigger asChild>
                         <div className="cursor-pointer p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors bg-white">
                           <div className="flex items-center justify-center">
-                            <QRCode 
-                              value={publicUrl} 
+                            <QRCode
+                              value={publicUrl}
                               size={150}
                               bgColor={"#ffffff"}
                               fgColor={"#000000"}
@@ -400,13 +624,14 @@ export default function BookingDetailPage() {
                         <DialogHeader>
                           <DialogTitle>Booking QR Code</DialogTitle>
                           <DialogDescription>
-                            Customer can scan this QR code to access their booking
+                            Customer can scan this QR code to access their
+                            booking
                           </DialogDescription>
                         </DialogHeader>
                         <div className="flex justify-center py-4">
                           <div className="bg-white p-4 rounded-lg">
-                            <QRCode 
-                              value={publicUrl} 
+                            <QRCode
+                              value={publicUrl}
                               size={300}
                               bgColor={"#ffffff"}
                               fgColor={"#000000"}
@@ -419,9 +644,9 @@ export default function BookingDetailPage() {
                     </Dialog>
                   </div>
                   <div className="flex space-x-2">
-                    <Input 
-                      value={publicUrl} 
-                      readOnly 
+                    <Input
+                      value={publicUrl}
+                      readOnly
                       className="font-mono text-sm"
                     />
                     <Button onClick={copyPublicUrl} size="icon">
@@ -432,13 +657,11 @@ export default function BookingDetailPage() {
               ) : (
                 <div className="text-center py-8">
                   <div className="text-gray-500 mb-4">
-                    {booking?.status === 'cancelled' ? (
-                      "Cannot generate public URL for cancelled bookings"
-                    ) : (
-                      "Generating public URL and QR code..."
-                    )}
+                    {booking?.status === "cancelled"
+                      ? "Cannot generate public URL for cancelled bookings"
+                      : "Generating public URL and QR code..."}
                   </div>
-                  {booking?.status !== 'cancelled' && (
+                  {booking?.status !== "cancelled" && (
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                   )}
                 </div>
@@ -454,53 +677,164 @@ export default function BookingDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Extra Services / Orders
-                <Dialog open={isOrderDialogOpen} onOpenChange={setIsOrderDialogOpen}>
+                <Dialog
+                  open={isOrderDialogOpen}
+                  onOpenChange={(open) => {
+                    setIsOrderDialogOpen(open);
+                    if (!open) {
+                      clearCart();
+                      setSelectedItem("");
+                      setQuantity(1);
+                    }
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button size="sm">
                       <Plus className="w-4 h-4 mr-2" />
                       Add Service
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-2xl">
                     <DialogHeader>
                       <DialogTitle>Add Extra Service</DialogTitle>
                       <DialogDescription>
                         Add additional services or items to this booking
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="item">Select Item</Label>
-                        <Select value={selectedItem} onValueChange={setSelectedItem}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose an item..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {inventory?.filter(item => item.status === 'available' && item.stock > 0).map((item) => (
-                              <SelectItem key={item._id} value={item._id}>
-                                {item.name} - ${item.price.toFixed(2)} (Stock: {item.stock})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    <div className="space-y-6">
+                      {/* Add Item Section */}
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="item">Select Item</Label>
+                          <Select
+                            value={selectedItem}
+                            onValueChange={setSelectedItem}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose an item..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {inventory?.map((item) => (
+                                <SelectItem key={item._id} value={item._id}>
+                                  {item.name} - ${item.price.toFixed(2)} (Stock:{" "}
+                                  {item.quantity}){" "}
+                                  {!item.isActive && " (Inactive)"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="flex-1">
+                            <Label htmlFor="quantity">Quantity</Label>
+                            <Input
+                              id="quantity"
+                              type="number"
+                              min="1"
+                              value={quantity}
+                              onChange={(e) =>
+                                setQuantity(parseInt(e.target.value) || 1)
+                              }
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <Button
+                              onClick={addItemToCart}
+                              disabled={!selectedItem}
+                            >
+                              Add to Cart
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="quantity">Quantity</Label>
-                        <Input
-                          id="quantity"
-                          type="number"
-                          min="1"
-                          value={quantity}
-                          onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                        />
-                      </div>
-                      <div className="flex justify-end space-x-2">
-                        <Button variant="outline" onClick={() => setIsOrderDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={handleAddOrder}>
-                          Add to Order
-                        </Button>
+
+                      {/* Cart Section */}
+                      {cart.length > 0 && (
+                        <div className="space-y-4">
+                          <Separator />
+                          <div>
+                            <h4 className="font-semibold mb-3">
+                              Order Cart ({cart.length} items)
+                            </h4>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {cart.map((cartItem) => (
+                                <div
+                                  key={cartItem.itemId}
+                                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                                >
+                                  <div className="flex-1">
+                                    <div className="font-medium">
+                                      {cartItem.name}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      ${cartItem.price.toFixed(2)} each
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={cartItem.quantity}
+                                      onChange={(e) =>
+                                        updateCartItemQuantity(
+                                          cartItem.itemId,
+                                          parseInt(e.target.value) || 1
+                                        )
+                                      }
+                                      className="w-20"
+                                    />
+                                    <div className="text-sm font-medium w-16 text-right">
+                                      $
+                                      {(
+                                        cartItem.price * cartItem.quantity
+                                      ).toFixed(2)}
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        removeItemFromCart(cartItem.itemId)
+                                      }
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-3 pt-3 border-t">
+                              <div className="flex justify-between items-center font-semibold">
+                                <span>Total:</span>
+                                <span>${getCartTotal().toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex justify-between">
+                        <div>
+                          {cart.length > 0 && (
+                            <Button variant="outline" onClick={clearCart}>
+                              Clear Cart
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsOrderDialogOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleSubmitOrder}
+                            disabled={cart.length === 0}
+                          >
+                            Submit Order ({cart.length} items)
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </DialogContent>
@@ -519,32 +853,57 @@ export default function BookingDetailPage() {
                     <div key={order._id} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h4 className="font-semibold">Order #{order._id.slice(-8)}</h4>
-                          <p className="text-sm text-gray-500">{formatDateTime(order.createdAt)}</p>
+                          <h4 className="font-semibold">
+                            Order #{order._id.slice(-8)}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            {formatDateTime(order.createdAt)}
+                          </p>
                         </div>
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
-                        </Badge>
+                        <select
+                          value={order.status}
+                          onChange={(e) =>
+                            handleStatusChange(order._id, e.target.value)
+                          }
+                          className={`px-2 py-1 rounded-full text-xs font-medium border-0 ${getOrderStatusColor(
+                            order.status
+                          )}`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="preparing">Preparing</option>
+                          <option value="ready">Ready</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
                       </div>
                       <div className="space-y-2">
                         {order.items.map((item, index) => (
-                          <div key={index} className="flex justify-between text-sm">
-                            <span>{item.name} × {item.quantity}</span>
-                            <span>${(item.price * item.quantity).toFixed(2)}</span>
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm"
+                          >
+                            <span>
+                              {item.name} × {item.quantity}
+                            </span>
+                            <span>
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </span>
                           </div>
                         ))}
                       </div>
                       <Separator className="my-2" />
                       <div className="flex justify-between font-semibold">
                         <span>Total</span>
-                        <span>${order.totalAmount.toFixed(2)}</span>
+                        <span>${order.total.toFixed(2)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  No additional orders yet. Add extra services using the button above.
+                  No additional orders yet. Add extra services using the button
+                  above.
                 </div>
               )}
             </CardContent>

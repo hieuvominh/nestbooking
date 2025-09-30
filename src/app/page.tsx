@@ -6,9 +6,11 @@ export default function Home() {
       <div className="max-w-md w-full space-y-8 text-center">
         <div>
           <h1 className="text-4xl font-bold text-gray-900 mb-2">BookingCoo</h1>
-          <p className="text-xl text-gray-600 mb-8">Co-working Space Management</p>
+          <p className="text-xl text-gray-600 mb-8">
+            Co-working Space Management
+          </p>
         </div>
-        
+
         <div className="space-y-4">
           <Link
             href="/admin/login"
@@ -16,14 +18,14 @@ export default function Home() {
           >
             Admin Login
           </Link>
-          
+
           <div className="text-sm text-gray-500">
             <p>Demo credentials:</p>
             <p>Admin: admin@bookingcoo.com / admin123</p>
             <p>Staff: staff@bookingcoo.com / staff123</p>
           </div>
         </div>
-        
+
         <div className="mt-8 text-sm text-gray-400">
           <p>Features:</p>
           <ul className="mt-2 space-y-1">
