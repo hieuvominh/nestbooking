@@ -438,7 +438,7 @@ export default function BookingDetailPage() {
             <p className="text-gray-500">Booking ID: {booking._id}</p>
           </div>
         </div>
-        <Button 
+        <Button
           onClick={() => router.push(`/admin/billing/${bookingId}`)}
           className="bg-green-600 hover:bg-green-700"
         >

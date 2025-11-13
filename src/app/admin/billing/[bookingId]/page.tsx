@@ -22,6 +22,12 @@ import {
   Package,
   DollarSign,
   Percent,
+  Plus,
+  Minus,
+  Trash2,
+  Search,
+  ShoppingCart,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +52,14 @@ interface Booking {
   paymentStatus: "pending" | "paid" | "refunded";
   notes?: string;
   createdAt: string;
+  // Combo-related fields
+  comboId?: {
+    _id: string;
+    name: string;
+    price: number;
+    duration: number;
+  };
+  isComboBooking?: boolean;
 }
 
 interface OrderItem {
@@ -80,6 +94,26 @@ interface OrdersResponse {
   orders: Order[];
 }
 
+interface InventoryItem {
+  _id: string;
+  sku: string;
+  name: string;
+  description?: string;
+  category: "food" | "beverage" | "office-supplies" | "merchandise" | "combo";
+  price: number;
+  quantity: number;
+  unit?: string;
+  type?: "item" | "combo";
+}
+
+interface CartItem {
+  itemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  category: string;
+}
+
 export default function BillingPage() {
   const params = useParams();
   const router = useRouter();
@@ -90,6 +124,12 @@ export default function BillingPage() {
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [promoCode, setPromoCode] = useState<string>("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  // State for adding items (only for active bookings)
+  const [showAddItems, setShowAddItems] = useState(false);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isAddingOrder, setIsAddingOrder] = useState(false);
 
   // Fetch booking data
   const {
@@ -106,6 +146,9 @@ export default function BillingPage() {
     mutate: mutateOrders,
   } = useApi<OrdersResponse>(`/api/orders?bookingId=${bookingId}`);
 
+  // Fetch inventory items for adding to active booking
+  const { data: inventory } = useApi<InventoryItem[]>("/api/inventory");
+
   const { apiCall } = useApi();
 
   const orders = ordersResponse?.orders || [];
@@ -118,9 +161,20 @@ export default function BillingPage() {
     return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
   }, [booking]);
 
-  // Calculate desk cost (duration * hourly rate)
+  /**
+   * Calculate desk cost with combo support
+   * - If combo booking: use combo fixed price (ignore hourly rate)
+   * - If regular booking: duration × hourly rate
+   */
   const deskCost = useMemo(() => {
     if (!booking) return 0;
+
+    // Check if this is a combo booking
+    if (booking.comboId || booking.isComboBooking) {
+      return booking.comboId?.price || 0;
+    }
+
+    // Regular desk booking - calculate based on hourly rate
     return Math.ceil(bookingDuration * booking.deskId.hourlyRate);
   }, [booking, bookingDuration]);
 
@@ -129,7 +183,7 @@ export default function BillingPage() {
     return orders.reduce((sum, order) => sum + order.total, 0);
   }, [orders]);
 
-  // Calculate subtotal (desk + orders)
+  // Calculate subtotal (desk/combo + orders)
   const subtotal = useMemo(() => {
     return deskCost + ordersTotal;
   }, [deskCost, ordersTotal]);
@@ -244,6 +298,140 @@ export default function BillingPage() {
       toast.success(`Promo code applied! ${discount}% discount`);
     } else {
       toast.error("Invalid promo code");
+    }
+  };
+
+  /**
+   * Cart Management Functions for Adding Items to Active Booking
+   */
+
+  // Check if booking is active (can add items)
+  const isActiveBooking = useMemo(() => {
+    if (!booking) return false;
+    return booking.status === "confirmed" || booking.status === "checked-in";
+  }, [booking]);
+
+  // Filter inventory (exclude combos, only show items)
+  const availableItems = useMemo(() => {
+    if (!inventory) return [];
+
+    return inventory.filter((item) => {
+      // Only show regular items (not combos)
+      if (item.type === "combo") return false;
+
+      // Only show active items with stock
+      if (item.quantity <= 0) return false;
+
+      // Apply search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          item.name.toLowerCase().includes(query) ||
+          item.description?.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
+  }, [inventory, searchQuery]);
+
+  // Add item to cart
+  const addToCart = (item: InventoryItem) => {
+    const existingItem = cart.find((cartItem) => cartItem.itemId === item._id);
+
+    if (existingItem) {
+      setCart(
+        cart.map((cartItem) =>
+          cartItem.itemId === item._id
+            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            : cartItem
+        )
+      );
+    } else {
+      setCart([
+        ...cart,
+        {
+          itemId: item._id,
+          name: item.name,
+          price: item.price,
+          quantity: 1,
+          category: item.category,
+        },
+      ]);
+    }
+    toast.success(`${item.name} added to cart`);
+  };
+
+  // Remove item from cart
+  const removeFromCart = (itemId: string) => {
+    setCart(cart.filter((item) => item.itemId !== itemId));
+    toast.info("Item removed from cart");
+  };
+
+  // Update cart quantity
+  const updateCartQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(itemId);
+      return;
+    }
+
+    setCart(
+      cart.map((item) =>
+        item.itemId === itemId ? { ...item, quantity: newQuantity } : item
+      )
+    );
+  };
+
+  // Calculate cart total
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [cart]);
+
+  /**
+   * Submit new order for active booking
+   * Creates an order with items in cart and updates billing totals
+   */
+  const handleAddItemsToBooking = async () => {
+    if (cart.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
+
+    setIsAddingOrder(true);
+    try {
+      const orderData = {
+        bookingId: bookingId,
+        items: cart.map((item) => ({
+          itemId: item.itemId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity,
+        })),
+        total: cartTotal,
+        status: "pending",
+        notes: "Additional items added during booking",
+      };
+
+      await apiCall("/api/orders", {
+        method: "POST",
+        body: orderData,
+      });
+
+      // Refresh orders and booking data
+      mutateOrders();
+      mutateBooking();
+
+      // Clear cart and close dialog
+      setCart([]);
+      setShowAddItems(false);
+
+      toast.success(`Added ${cart.length} item(s) to booking!`);
+    } catch (error) {
+      console.error("Error adding items:", error);
+      toast.error("Failed to add items to booking");
+    } finally {
+      setIsAddingOrder(false);
     }
   };
 
@@ -385,15 +573,191 @@ export default function BillingPage() {
           {/* Orders Section */}
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                <CardTitle>Orders</CardTitle>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  <CardTitle>Orders</CardTitle>
+                </div>
+                {/* Add Items Button - only show for active bookings */}
+                {isActiveBooking && !showAddItems && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowAddItems(true)}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Items
+                  </Button>
+                )}
               </div>
               <CardDescription>
                 Food, beverages, and items ordered
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Add Items Interface - shown when active */}
+              {showAddItems && isActiveBooking && (
+                <Card className="mb-6 border-2 border-blue-200 bg-blue-50">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShoppingCart className="h-5 w-5 text-blue-600" />
+                        <CardTitle className="text-blue-900">
+                          Add Items to Booking
+                        </CardTitle>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setShowAddItems(false);
+                          setCart([]);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <CardDescription>
+                      Select items to add to this active booking
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Search items..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 bg-white"
+                      />
+                    </div>
+
+                    {/* Available Items Grid */}
+                    <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                      {availableItems.map((item) => (
+                        <div
+                          key={item._id}
+                          className="border rounded-lg p-3 bg-white hover:bg-gray-50 transition"
+                        >
+                          <div className="mb-2">
+                            <h4 className="font-semibold text-sm">
+                              {item.name}
+                            </h4>
+                            <p className="text-xs text-gray-500 line-clamp-1">
+                              {item.description}
+                            </p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-green-600">
+                              ${item.price.toFixed(2)}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => addToCart(item)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Cart Preview */}
+                    {cart.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="space-y-3">
+                          <h4 className="font-semibold text-sm">
+                            Cart ({cart.length})
+                          </h4>
+                          {cart.map((item) => (
+                            <div
+                              key={item.itemId}
+                              className="flex justify-between items-center bg-white p-2 rounded border"
+                            >
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">
+                                  {item.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  ${item.price.toFixed(2)} each
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() =>
+                                    updateCartQuantity(
+                                      item.itemId,
+                                      item.quantity - 1
+                                    )
+                                  }
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="w-6 text-center text-sm font-medium">
+                                  {item.quantity}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() =>
+                                    updateCartQuantity(
+                                      item.itemId,
+                                      item.quantity + 1
+                                    )
+                                  }
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => removeFromCart(item.itemId)}
+                                >
+                                  <Trash2 className="h-3 w-3 text-red-500" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+
+                          <div className="flex justify-between items-center pt-2 border-t">
+                            <span className="font-semibold">Cart Total:</span>
+                            <span className="text-lg font-bold text-green-600">
+                              ${cartTotal.toFixed(2)}
+                            </span>
+                          </div>
+
+                          <Button
+                            className="w-full"
+                            onClick={handleAddItemsToBooking}
+                            disabled={isAddingOrder}
+                          >
+                            {isAddingOrder
+                              ? "Adding Items..."
+                              : `Add ${
+                                  cart.length
+                                } Item(s) - $${cartTotal.toFixed(2)}`}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Existing Orders List */}
               {orders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   No orders for this booking
@@ -543,12 +907,36 @@ export default function BillingPage() {
             <CardContent className="space-y-4">
               {/* Breakdown */}
               <div className="space-y-3">
+                {/* Show combo info if applicable */}
+                {(booking.comboId || booking.isComboBooking) && (
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Package className="h-4 w-4 text-green-600" />
+                      <span className="text-xs font-semibold text-green-800">
+                        COMBO PACKAGE
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium">
+                      {booking.comboId?.name || "Combo Package"}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {booking.comboId?.duration || 0} hours included
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Desk Rental</span>
+                  <span className="text-gray-600">
+                    {booking.comboId || booking.isComboBooking
+                      ? "Combo Package"
+                      : "Desk Rental"}
+                  </span>
                   <span className="font-medium">${deskCost.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Orders</span>
+                  <span className="text-gray-600">
+                    Orders {orders.length > 0 && `(${orders.length})`}
+                  </span>
                   <span className="font-medium">${ordersTotal.toFixed(2)}</span>
                 </div>
 

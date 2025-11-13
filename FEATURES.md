@@ -17,12 +17,18 @@ BookingCoo is a comprehensive desk booking and coworking space management system
 
 ### 📅 Booking System
 - **Desk Reservations**: Book desks for specific time slots
+- **Enhanced Booking Creation**: 
+  - Add inventory items/combos during booking creation
+  - Live total calculation (desk + items)
+  - Immediate payment processing option
+  - Cart system for multiple items with quantity control
 - **Booking Status Management**: 
   - Pending → Confirmed → Checked-in → Completed/Cancelled
 - **Customer Information**: Store customer details (name, email, phone)
 - **Time Conflict Prevention**: Automatic conflict detection for overlapping bookings
 - **Public Booking Links**: Generate secure public URLs for customer self-service
 - **QR Code Generation**: QR codes for easy booking access
+- **Billing Integration**: Direct access to detailed billing page from any booking
 
 ### 👥 Customer Management
 - **Customer Profiles**: Store customer information with booking history

@@ -105,6 +105,47 @@ async function seedDatabase() {
       // Merchandise
       { sku: 'TSHIRT001', name: 'BookingCoo T-Shirt', description: 'Official BookingCoo branded t-shirt', category: 'merchandise', price: 24.99, quantity: 20, lowStockThreshold: 3, unit: 'pcs' },
       { sku: 'MUG001', name: 'BookingCoo Mug', description: 'Ceramic mug with logo', category: 'merchandise', price: 12.99, quantity: 25, lowStockThreshold: 5, unit: 'pcs' },
+      
+      // Combo Packages
+      { 
+        sku: 'COMBO001', 
+        name: 'Half-Day Productivity Package', 
+        description: 'Perfect for focused work sessions', 
+        category: 'combo', 
+        price: 49.99, 
+        quantity: 10, 
+        lowStockThreshold: 2, 
+        unit: 'packages',
+        type: 'combo',
+        duration: 4,
+        includedItems: ['4 hours desk time', 'Coffee or tea', 'Light snack', 'Water bottle']
+      },
+      { 
+        sku: 'COMBO002', 
+        name: 'Full-Day Premium Package', 
+        description: 'Everything you need for a full workday', 
+        category: 'combo', 
+        price: 89.99, 
+        quantity: 8, 
+        lowStockThreshold: 2, 
+        unit: 'packages',
+        type: 'combo',
+        duration: 8,
+        includedItems: ['8 hours desk time', 'Lunch meal', 'Coffee & tea (unlimited)', 'Snacks', 'Water & juice', 'Priority support']
+      },
+      { 
+        sku: 'COMBO003', 
+        name: 'Quick Meeting Package', 
+        description: 'Short productive meeting setup', 
+        category: 'combo', 
+        price: 29.99, 
+        quantity: 15, 
+        lowStockThreshold: 3, 
+        unit: 'packages',
+        type: 'combo',
+        duration: 2,
+        includedItems: ['2 hours desk time', 'Coffee or tea', 'Water']
+      },
     ];
 
     for (const itemData of inventoryItems) {

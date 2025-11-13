@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Plus } from "lucide-react";
 import { BookingEditModal } from "@/components/modals";
 
 interface Booking {
@@ -156,7 +157,10 @@ export default function BookingsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Bookings Management</h1>
-        <Button onClick={handleCreate}>Create New Booking</Button>
+        <Button onClick={() => router.push("/admin/bookings/create")}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create New Booking
+        </Button>
       </div>
 
       <Card>

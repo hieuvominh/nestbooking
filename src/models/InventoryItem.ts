@@ -5,13 +5,16 @@ export interface IInventoryItem extends Document {
   sku: string;
   name: string;
   description?: string;
-  category: 'food' | 'beverage' | 'merchandise' | 'office-supplies';
+  category: 'food' | 'beverage' | 'merchandise' | 'office-supplies' | 'combo';
   price: number;
   quantity: number;
   lowStockThreshold: number;
   unit: string;
   imageUrl?: string;
   isActive: boolean;
+  type?: 'combo' | 'item';
+  duration?: number;
+  includedItems?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,7 +39,7 @@ const InventoryItemSchema = new Schema<IInventoryItem>(
     },
     category: {
       type: String,
-      enum: ['food', 'beverage', 'merchandise', 'office-supplies'],
+      enum: ['food', 'beverage', 'merchandise', 'office-supplies', 'combo'],
       required: true,
     },
     price: {
@@ -69,6 +72,19 @@ const InventoryItemSchema = new Schema<IInventoryItem>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    type: {
+      type: String,
+      enum: ['combo', 'item'],
+      default: 'item',
+    },
+    duration: {
+      type: Number,
+      min: 0,
+    },
+    includedItems: {
+      type: [String],
+      default: [],
     },
   },
   {
