@@ -279,6 +279,17 @@ export default function BookingsPage() {
                         variant="outline"
                         onClick={(e) => {
                           e.stopPropagation();
+                          router.push(`/admin/billing/${booking._id}`);
+                        }}
+                        className="bg-green-50 text-green-600 hover:bg-green-100"
+                      >
+                        Billing
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleDelete(booking._id);
                         }}
                         className="text-red-600 hover:bg-red-50"

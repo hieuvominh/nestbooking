@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Copy, Plus, QrCode, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Plus, QrCode, Trash2, Receipt } from "lucide-react";
 import { QRCodeCanvas as QRCode } from "qrcode.react";
 import { toast } from "sonner";
 import {
@@ -438,6 +438,13 @@ export default function BookingDetailPage() {
             <p className="text-gray-500">Booking ID: {booking._id}</p>
           </div>
         </div>
+        <Button 
+          onClick={() => router.push(`/admin/billing/${bookingId}`)}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <Receipt className="w-4 h-4 mr-2" />
+          View Billing
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
