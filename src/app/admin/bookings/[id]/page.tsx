@@ -13,7 +13,16 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Copy, Plus, QrCode, Trash2, Receipt } from "lucide-react";
+import {
+  ArrowLeft,
+  Copy,
+  Plus,
+  QrCode,
+  Trash2,
+  Receipt,
+  CheckCircle,
+  DollarSign,
+} from "lucide-react";
 import { QRCodeCanvas as QRCode } from "qrcode.react";
 import { toast } from "sonner";
 import {
@@ -53,6 +62,7 @@ interface Booking {
   signature?: string;
   notes?: string;
   checkedInAt?: string;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -380,6 +390,15 @@ export default function BookingDetailPage() {
     }
   };
 
+  /**
+   * Check if booking can be checked out
+   * Only confirmed or checked-in bookings can be checked out
+   */
+  const canCheckOut = () => {
+    if (!booking) return false;
+    return booking.status === "confirmed" || booking.status === "checked-in";
+  };
+
   const getOrderStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -438,13 +457,24 @@ export default function BookingDetailPage() {
             <p className="text-gray-500">Booking ID: {booking._id}</p>
           </div>
         </div>
-        <Button
-          onClick={() => router.push(`/admin/billing/${bookingId}`)}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <Receipt className="w-4 h-4 mr-2" />
-          View Billing
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => router.push(`/admin/billing/${bookingId}`)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Receipt className="w-4 h-4 mr-2" />
+            View Billing
+          </Button>
+          {canCheckOut() && (
+            <Button
+              onClick={() => router.push(`/admin/billing/${bookingId}`)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Complete & Pay / Trả bàn
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

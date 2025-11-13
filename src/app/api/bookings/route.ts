@@ -80,7 +80,11 @@ async function createBooking(request: AuthenticatedRequest) {
       customer,
       startTime,
       endTime,
-      notes
+      notes,
+      status,
+      paymentStatus,
+      totalAmount,
+      checkedInAt
     } = body;
 
     // Validate required fields
@@ -88,8 +92,19 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('Missing required fields');
     }
 
-    if (!customer.name || !customer.email || !customer.phone) {
-      return ApiResponses.badRequest('Complete customer information is required');
+    if (!customer.name) {
+      return ApiResponses.badRequest('Customer name is required');
+    }
+
+    // Clean up customer object - remove undefined values
+    const cleanCustomer: any = {
+      name: customer.name.trim()
+    };
+    if (customer.email && customer.email.trim()) {
+      cleanCustomer.email = customer.email.trim();
+    }
+    if (customer.phone && customer.phone.trim()) {
+      cleanCustomer.phone = customer.phone.trim();
     }
 
     const start = new Date(startTime);
@@ -100,7 +115,9 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('End time must be after start time');
     }
 
-    if (start < new Date()) {
+    // Only validate past dates for future bookings (status = pending)
+    // Allow past dates for immediate check-ins (status = checked-in)
+    if (status !== 'checked-in' && start < new Date()) {
       return ApiResponses.badRequest('Booking cannot be in the past');
     }
 
@@ -130,19 +147,30 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.conflict('Desk is already booked for this time period');
     }
 
-    // Calculate total amount
+    // Calculate total amount (use provided value or calculate from desk rate)
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    const totalAmount = Math.ceil(durationHours * desk.hourlyRate);
+    const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
+    const finalTotalAmount = totalAmount || calculatedAmount;
 
-    // Create booking
-    const booking = new Booking({
+    // Create booking with provided or default values
+    const bookingData: any = {
       deskId,
-      customer,
+      customer: cleanCustomer,
       startTime: start,
       endTime: end,
-      totalAmount,
+      totalAmount: finalTotalAmount,
+      status: status || 'confirmed',
+      paymentStatus: paymentStatus || 'pending',
       notes
-    });
+    };
+
+    // Add checkedInAt if provided (for immediate check-ins)
+    if (checkedInAt) {
+      bookingData.checkedInAt = new Date(checkedInAt);
+    }
+
+    // Create booking
+    const booking = new Booking(bookingData);
 
     await booking.save();
 
@@ -158,9 +186,9 @@ async function createBooking(request: AuthenticatedRequest) {
     // Create transaction record
     const transaction = new Transaction({
       type: 'income',
-      amount: totalAmount,
+      amount: finalTotalAmount,
       source: 'booking',
-      description: `Booking for desk ${desk.label} - ${customer.name}`,
+      description: `Booking for desk ${desk.label} - ${cleanCustomer.name}`,
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId
@@ -177,6 +205,15 @@ async function createBooking(request: AuthenticatedRequest) {
 
   } catch (error) {
     console.error('Create booking error:', error);
+    // Log the full error details for debugging
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      // Return the actual error message in development
+      return ApiResponses.serverError(error.message);
+    }
     return ApiResponses.serverError();
   }
 }

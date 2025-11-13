@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -125,6 +126,9 @@ export default function CreateBookingPage() {
     "pending" | "paid" | "refunded"
   >("pending");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Booking timing state
+  const [isBookingForLater, setIsBookingForLater] = useState(false);
 
   // Auto-update end time when combo is selected
   useEffect(() => {
@@ -329,14 +333,6 @@ export default function CreateBookingPage() {
       toast.error("Please enter customer name");
       return false;
     }
-    if (!formData.customerEmail.trim()) {
-      toast.error("Please enter customer email");
-      return false;
-    }
-    if (!formData.customerPhone.trim()) {
-      toast.error("Please enter customer phone");
-      return false;
-    }
     if (!formData.deskId) {
       toast.error("Please select a desk");
       return false;
@@ -365,20 +361,29 @@ export default function CreateBookingPage() {
     setIsSubmitting(true);
 
     try {
+      // Determine booking status based on timing
+      // If booking for later: status = pending
+      // If booking for now: status = checked-in (with checkedInAt timestamp)
+      const bookingStatus = isBookingForLater ? "pending" : "checked-in";
+      const checkedInAt = isBookingForLater
+        ? undefined
+        : new Date().toISOString();
+
       // Step 1: Create the booking
       const bookingData = {
         customer: {
           name: formData.customerName,
-          email: formData.customerEmail,
-          phone: formData.customerPhone,
+          email: formData.customerEmail || undefined,
+          phone: formData.customerPhone || undefined,
         },
         deskId: formData.deskId,
         startTime: formData.startTime,
         endTime: formData.endTime,
-        status: "confirmed",
+        status: bookingStatus,
         totalAmount: grandTotal,
         paymentStatus: paymentStatus,
         notes: formData.notes,
+        ...(checkedInAt && { checkedInAt }),
       };
 
       const bookingResponse: any = await apiCall("/api/bookings", {
@@ -481,7 +486,7 @@ export default function CreateBookingPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="customerEmail">Email *</Label>
+                    <Label htmlFor="customerEmail">Email</Label>
                     <Input
                       id="customerEmail"
                       type="email"
@@ -493,11 +498,10 @@ export default function CreateBookingPage() {
                           customerEmail: e.target.value,
                         })
                       }
-                      required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="customerPhone">Phone *</Label>
+                    <Label htmlFor="customerPhone">Phone</Label>
                     <Input
                       id="customerPhone"
                       type="tel"
@@ -509,7 +513,6 @@ export default function CreateBookingPage() {
                           customerPhone: e.target.value,
                         })
                       }
-                      required
                     />
                   </div>
                 </div>
@@ -645,6 +648,35 @@ export default function CreateBookingPage() {
                     />
                   </div>
                 </div>
+
+                {/* Book for Later Checkbox */}
+                <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <Checkbox
+                    id="bookForLater"
+                    checked={isBookingForLater}
+                    onCheckedChange={(checked) =>
+                      setIsBookingForLater(checked === true)
+                    }
+                  />
+                  <Label
+                    htmlFor="bookForLater"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Book for Later (Status: Pending)
+                  </Label>
+                  <div className="ml-auto">
+                    <Badge
+                      variant={isBookingForLater ? "secondary" : "default"}
+                    >
+                      {isBookingForLater ? "Pending" : "Checked-In"}
+                    </Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 -mt-2 ml-1">
+                  {isBookingForLater
+                    ? "Customer will check in when they arrive. Status will be 'Pending'."
+                    : "Customer is checking in now. Status will be 'Checked-In'."}
+                </p>
 
                 {bookingDuration > 0 && !selectedCombo && (
                   <div className="bg-green-50 p-3 rounded-lg">

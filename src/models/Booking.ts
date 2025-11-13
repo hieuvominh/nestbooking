@@ -2,8 +2,8 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICustomerInfo {
   name: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface IBooking extends Document {
@@ -18,6 +18,7 @@ export interface IBooking extends Document {
   publicToken?: string;
   notes?: string;
   checkedInAt?: Date;
+  completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,16 +31,18 @@ const CustomerInfoSchema = new Schema<ICustomerInfo>({
   },
   email: {
     type: String,
-    required: true,
+    required: false,
     lowercase: true,
     trim: true,
+    default: undefined,
   },
   phone: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
+    default: undefined,
   },
-});
+}, { _id: false });
 
 const BookingSchema = new Schema<IBooking>(
   {
@@ -85,6 +88,9 @@ const BookingSchema = new Schema<IBooking>(
       trim: true,
     },
     checkedInAt: {
+      type: Date,
+    },
+    completedAt: {
       type: Date,
     },
   },

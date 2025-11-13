@@ -28,6 +28,7 @@ import {
   Search,
   ShoppingCart,
   X,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,6 +52,8 @@ interface Booking {
   totalAmount: number;
   paymentStatus: "pending" | "paid" | "refunded";
   notes?: string;
+  checkedInAt?: string;
+  completedAt?: string;
   createdAt: string;
   // Combo-related fields
   comboId?: {
@@ -281,6 +284,68 @@ export default function BillingPage() {
     } finally {
       setIsProcessingPayment(false);
     }
+  };
+
+  /**
+   * Handle check-out / complete booking
+   * Combines payment processing with booking completion
+   * - If payment pending: mark as paid with final total
+   * - Complete booking status and set completedAt timestamp
+   */
+  const handleCheckOut = async () => {
+    if (!booking) return;
+
+    const confirmed = confirm(
+      `Complete check-out for ${
+        booking.customer.name
+      }?\n\nFinal Total: $${finalTotal.toFixed(2)}\nPayment Status: ${
+        booking.paymentStatus
+      }`
+    );
+    if (!confirmed) return;
+
+    setIsProcessingPayment(true);
+    try {
+      const updateData: any = {
+        status: "completed",
+        completedAt: new Date().toISOString(),
+        totalAmount: finalTotal, // Always update with final calculated total
+      };
+
+      // If payment is pending, mark as paid
+      if (booking.paymentStatus === "pending") {
+        updateData.paymentStatus = "paid";
+      }
+
+      await apiCall(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        body: updateData,
+      });
+
+      mutateBooking();
+
+      if (booking.paymentStatus === "pending") {
+        toast.success(
+          "Payment completed and booking checked out successfully!"
+        );
+      } else {
+        toast.success("Booking checked out successfully!");
+      }
+    } catch (error) {
+      console.error("Error checking out:", error);
+      toast.error("Failed to check out booking");
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  /**
+   * Check if booking can be checked out
+   * Only confirmed or checked-in bookings can be completed
+   */
+  const canCheckOut = () => {
+    if (!booking) return false;
+    return booking.status === "confirmed" || booking.status === "checked-in";
   };
 
   // Apply promo code (placeholder logic - you can enhance this)
@@ -967,7 +1032,25 @@ export default function BillingPage() {
 
               {/* Payment Actions */}
               <div className="space-y-2 pt-4">
-                {booking.paymentStatus === "pending" && (
+                {/* Check-Out Button - Shows for active bookings */}
+                {canCheckOut() && (
+                  <Button
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    size="lg"
+                    onClick={handleCheckOut}
+                    disabled={isProcessingPayment}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {isProcessingPayment
+                      ? "Processing..."
+                      : booking.paymentStatus === "pending"
+                      ? `Pay & Complete Check-Out ($${finalTotal.toFixed(2)})`
+                      : "Complete Check-Out"}
+                  </Button>
+                )}
+
+                {/* Mark as Paid - Only show if not checking out */}
+                {booking.paymentStatus === "pending" && !canCheckOut() && (
                   <Button
                     className="w-full"
                     size="lg"
@@ -997,14 +1080,16 @@ export default function BillingPage() {
                       </svg>
                       <span className="font-medium">Payment Completed</span>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="w-full text-red-600 border-red-300 hover:bg-red-50"
-                      onClick={handleRefund}
-                      disabled={isProcessingPayment}
-                    >
-                      {isProcessingPayment ? "Processing..." : "Issue Refund"}
-                    </Button>
+                    {!canCheckOut() && (
+                      <Button
+                        variant="outline"
+                        className="w-full text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={handleRefund}
+                        disabled={isProcessingPayment}
+                      >
+                        {isProcessingPayment ? "Processing..." : "Issue Refund"}
+                      </Button>
+                    )}
                   </>
                 )}
 
