@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PrintBill } from "@/components/PrintBill";
 
 interface Booking {
   _id: string;
@@ -458,6 +459,8 @@ export default function BookingDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {/* Print Bill Button - Only visible when payment is completed */}
+          <PrintBill booking={booking} orders={orders} deskHourlyRate={5} />
           <Button
             onClick={() => router.push(`/admin/billing/${bookingId}`)}
             className="bg-green-600 hover:bg-green-700"

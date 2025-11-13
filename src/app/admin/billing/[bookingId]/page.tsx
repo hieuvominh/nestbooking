@@ -31,6 +31,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PrintBill } from "@/components/PrintBill";
 
 // TypeScript Interfaces
 interface Booking {
@@ -1080,6 +1081,39 @@ export default function BillingPage() {
                       </svg>
                       <span className="font-medium">Payment Completed</span>
                     </div>
+
+                    {/* Print Bill Button */}
+                    <PrintBill
+                      booking={{
+                        _id: booking._id,
+                        customer: {
+                          name: booking.customer.name,
+                          phone: booking.customer.phone,
+                          email: booking.customer.email,
+                        },
+                        deskNumber:
+                          parseInt(booking.deskId.label.replace(/\D/g, "")) ||
+                          0,
+                        startTime: booking.startTime,
+                        endTime: booking.endTime,
+                        checkedInAt: booking.checkedInAt,
+                        totalAmount: booking.totalAmount,
+                        paymentStatus: booking.paymentStatus,
+                        status: booking.status,
+                        notes: booking.notes,
+                        comboPackage: booking.comboId
+                          ? {
+                              name: booking.comboId.name,
+                              duration: booking.comboId.duration,
+                              price: booking.comboId.price,
+                            }
+                          : undefined,
+                      }}
+                      orders={orders}
+                      deskHourlyRate={booking.deskId.hourlyRate}
+                      className="w-full"
+                    />
+
                     {!canCheckOut() && (
                       <Button
                         variant="outline"
