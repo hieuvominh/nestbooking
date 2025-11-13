@@ -238,7 +238,9 @@ export default function CreateBookingPage() {
   // Handle combo selection
   const selectCombo = (combo: InventoryItem) => {
     setSelectedCombo(combo);
-    toast.success(`${combo.name} selected! Duration: ${combo.duration}h`);
+    toast.success(
+      `${combo.name} đã được chọn! Thời lượng: ${combo.duration} giờ`
+    );
   };
 
   // Clear combo selection
@@ -246,7 +248,7 @@ export default function CreateBookingPage() {
     setSelectedCombo(null);
     // Reset end time to allow manual input
     setFormData((prev) => ({ ...prev, endTime: "" }));
-    toast.info("Combo cleared. You can now set custom duration.");
+    toast.info("Đã xóa combo. Bạn có thể tự chọn thời lượng.");
   };
 
   // Add item to cart
@@ -276,7 +278,7 @@ export default function CreateBookingPage() {
       ]);
     }
 
-    toast.success(`${item.name} added to cart`);
+    toast.success(`${item.name} đã thêm vào giỏ hàng`);
   };
 
   // Update cart item quantity
@@ -330,23 +332,23 @@ export default function CreateBookingPage() {
   // Validate form
   const validateForm = (): boolean => {
     if (!formData.customerName.trim()) {
-      toast.error("Please enter customer name");
+      toast.error("Vui lòng nhập tên khách hàng");
       return false;
     }
     if (!formData.deskId) {
-      toast.error("Please select a desk");
+      toast.error("Vui lòng chọn bàn");
       return false;
     }
     if (!formData.startTime) {
-      toast.error("Please select start time");
+      toast.error("Vui lòng chọn giờ bắt đầu");
       return false;
     }
     if (!formData.endTime) {
-      toast.error("Please select end time");
+      toast.error("Vui lòng chọn giờ kết thúc");
       return false;
     }
     if (bookingDuration <= 0) {
-      toast.error("End time must be after start time");
+      toast.error("Giờ kết thúc phải sau giờ bắt đầu");
       return false;
     }
     return true;
@@ -420,13 +422,13 @@ export default function CreateBookingPage() {
         });
       }
 
-      toast.success("Booking created successfully!");
+      toast.success("Đã tạo đặt bàn thành công!");
 
       // Redirect to booking detail page
       router.push(`/admin/bookings/${bookingId}`);
     } catch (error) {
       console.error("Error creating booking:", error);
-      toast.error("Failed to create booking. Please try again.");
+      toast.error("Tạo đặt bàn thất bại. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
@@ -435,13 +437,13 @@ export default function CreateBookingPage() {
   // Handle immediate payment
   const handlePayNow = () => {
     setPaymentStatus("paid");
-    toast.success("Payment status updated to Paid");
+    toast.success("Trạng thái thanh toán đã cập nhật: Đã thanh toán");
   };
 
   if (desksLoading || inventoryLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading...</div>
+        <div className="text-lg">Đang tải...</div>
       </div>
     );
   }
@@ -455,8 +457,8 @@ export default function CreateBookingPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Create New Booking</h1>
-            <p className="text-gray-500">Book a desk and add items in one go</p>
+            <h1 className="text-3xl font-bold">Tạo Đặt Bàn Mới</h1>
+            <p className="text-gray-500">Đặt bàn và thêm món trong một lần</p>
           </div>
         </div>
       </div>
@@ -468,15 +470,15 @@ export default function CreateBookingPage() {
             {/* Customer Information */}
             <Card>
               <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
-                <CardDescription>Enter customer details</CardDescription>
+                <CardTitle>Thông Tin Khách Hàng</CardTitle>
+                <CardDescription>Nhập thông tin khách hàng</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="customerName">Full Name *</Label>
+                  <Label htmlFor="customerName">Họ và Tên *</Label>
                   <Input
                     id="customerName"
-                    placeholder="John Doe"
+                    placeholder="Nguyễn Văn A"
                     value={formData.customerName}
                     onChange={(e) =>
                       setFormData({ ...formData, customerName: e.target.value })
@@ -490,7 +492,7 @@ export default function CreateBookingPage() {
                     <Input
                       id="customerEmail"
                       type="email"
-                      placeholder="john@example.com"
+                      placeholder="nguyen@example.com"
                       value={formData.customerEmail}
                       onChange={(e) =>
                         setFormData({
@@ -501,11 +503,11 @@ export default function CreateBookingPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="customerPhone">Phone</Label>
+                    <Label htmlFor="customerPhone">Số Điện Thoại</Label>
                     <Input
                       id="customerPhone"
                       type="tel"
-                      placeholder="+1234567890"
+                      placeholder="+84 123 456 789"
                       value={formData.customerPhone}
                       onChange={(e) =>
                         setFormData({
@@ -522,14 +524,12 @@ export default function CreateBookingPage() {
             {/* Desk Selection & Time */}
             <Card>
               <CardHeader>
-                <CardTitle>Desk & Time Selection</CardTitle>
-                <CardDescription>
-                  Choose desk and booking duration
-                </CardDescription>
+                <CardTitle>Chọn Bàn & Thời Gian</CardTitle>
+                <CardDescription>Chọn bàn và thời lượng đặt</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="deskId">Select Desk *</Label>
+                  <Label htmlFor="deskId">Chọn Bàn *</Label>
                   <Select
                     value={formData.deskId}
                     onValueChange={(value) =>
@@ -537,7 +537,7 @@ export default function CreateBookingPage() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Choose a desk" />
+                      <SelectValue placeholder="Chọn một bàn" />
                     </SelectTrigger>
                     <SelectContent>
                       {desks
@@ -545,7 +545,7 @@ export default function CreateBookingPage() {
                         .map((desk) => (
                           <SelectItem key={desk._id} value={desk._id}>
                             {desk.label} - {desk.location} (${desk.hourlyRate}
-                            /hr)
+                            /giờ)
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -561,7 +561,7 @@ export default function CreateBookingPage() {
                       {selectedDesk.description}
                     </p>
                     <p className="text-sm font-semibold mt-1">
-                      ${selectedDesk.hourlyRate}/hour
+                      ${selectedDesk.hourlyRate}/giờ
                     </p>
                   </div>
                 )}
@@ -574,7 +574,7 @@ export default function CreateBookingPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <Package className="h-4 w-4 text-green-600" />
                           <p className="text-sm font-bold text-green-800">
-                            COMBO PACKAGE SELECTED
+                            ĐÃ CHỌN GÓI COMBO
                           </p>
                         </div>
                         <p className="text-base font-semibold">
@@ -587,7 +587,7 @@ export default function CreateBookingPage() {
                           <p className="text-sm">
                             <Clock className="inline h-4 w-4 mr-1" />
                             <span className="font-semibold">
-                              {selectedCombo.duration}h fixed duration
+                              {selectedCombo.duration} giờ cố định
                             </span>
                           </p>
                           <p className="text-sm">
@@ -605,7 +605,7 @@ export default function CreateBookingPage() {
                         onClick={clearCombo}
                         className="text-red-600 hover:text-red-700"
                       >
-                        Remove
+                        Gỡ Bỏ
                       </Button>
                     </div>
                   </div>
@@ -613,7 +613,7 @@ export default function CreateBookingPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="startTime">Start Time *</Label>
+                    <Label htmlFor="startTime">Giờ Bắt Đầu *</Label>
                     <Input
                       id="startTime"
                       type="datetime-local"
@@ -626,10 +626,10 @@ export default function CreateBookingPage() {
                   </div>
                   <div>
                     <Label htmlFor="endTime">
-                      End Time *{" "}
+                      Giờ Kết Thúc *{" "}
                       {selectedCombo && (
                         <span className="text-xs text-gray-500">
-                          (Auto-calculated from combo)
+                          (Tự động tính từ combo)
                         </span>
                       )}
                     </Label>
@@ -662,34 +662,34 @@ export default function CreateBookingPage() {
                     htmlFor="bookForLater"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                   >
-                    Book for Later (Status: Pending)
+                    Đặt Trước (Trạng thái: Chờ)
                   </Label>
                   <div className="ml-auto">
                     <Badge
                       variant={isBookingForLater ? "secondary" : "default"}
                     >
-                      {isBookingForLater ? "Pending" : "Checked-In"}
+                      {isBookingForLater ? "Chờ" : "Đã Check-in"}
                     </Badge>
                   </div>
                 </div>
                 <p className="text-xs text-gray-600 -mt-2 ml-1">
                   {isBookingForLater
-                    ? "Customer will check in when they arrive. Status will be 'Pending'."
-                    : "Customer is checking in now. Status will be 'Checked-In'."}
+                    ? "Khách sẽ check-in khi đến. Trạng thái sẽ là 'Chờ'."
+                    : "Khách đang check-in ngay. Trạng thái sẽ là 'Đã Check-in'."}
                 </p>
 
                 {bookingDuration > 0 && !selectedCombo && (
                   <div className="bg-green-50 p-3 rounded-lg">
                     <p className="text-sm">
                       <Clock className="inline h-4 w-4 mr-1" />
-                      Duration:{" "}
+                      Thời Lượng:{" "}
                       <span className="font-semibold">
-                        {bookingDuration.toFixed(2)} hours
+                        {bookingDuration.toFixed(2)} giờ
                       </span>
                     </p>
                     <p className="text-sm mt-1">
                       <DollarSign className="inline h-4 w-4 mr-1" />
-                      Desk Cost:{" "}
+                      Phí Bàn:{" "}
                       <span className="font-semibold">
                         ${deskCost.toFixed(2)}
                       </span>
@@ -698,10 +698,10 @@ export default function CreateBookingPage() {
                 )}
 
                 <div>
-                  <Label htmlFor="notes">Notes (Optional)</Label>
+                  <Label htmlFor="notes">Ghi Chú (Tùy chọn)</Label>
                   <Textarea
                     id="notes"
-                    placeholder="Any special requests or notes..."
+                    placeholder="Yêu cầu đặc biệt hoặc ghi chú..."
                     value={formData.notes}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                       setFormData({ ...formData, notes: e.target.value })
@@ -719,14 +719,12 @@ export default function CreateBookingPage() {
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Package className="h-5 w-5" />
-                      {viewMode === "combos"
-                        ? "Select Combo Package"
-                        : "Add Items"}
+                      {viewMode === "combos" ? "Chọn Gói Combo" : "Thêm Món"}
                     </CardTitle>
                     <CardDescription>
                       {viewMode === "combos"
-                        ? "Choose a combo package with fixed duration and price"
-                        : "Add food, beverages, or office items as add-ons"}
+                        ? "Chọn gói combo với thời lượng và giá cố định"
+                        : "Thêm đồ ăn, đồ uống hoặc văn phòng phẩm"}
                     </CardDescription>
                   </div>
                 </div>
@@ -741,7 +739,7 @@ export default function CreateBookingPage() {
                     onClick={() => setViewMode("combos")}
                   >
                     <Package className="h-4 w-4 mr-2" />
-                    Combo Packages
+                    Gói Combo
                   </Button>
                   <Button
                     type="button"
@@ -750,7 +748,7 @@ export default function CreateBookingPage() {
                     onClick={() => setViewMode("items")}
                   >
                     <ShoppingCart className="h-4 w-4 mr-2" />
-                    Individual Items
+                    Món Đơn Lẻ
                   </Button>
                 </div>
 
@@ -760,9 +758,7 @@ export default function CreateBookingPage() {
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
                       placeholder={
-                        viewMode === "combos"
-                          ? "Search combos..."
-                          : "Search items..."
+                        viewMode === "combos" ? "Tìm combo..." : "Tìm món..."
                       }
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -774,17 +770,17 @@ export default function CreateBookingPage() {
                     onValueChange={setCategoryFilter}
                   >
                     <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Category" />
+                      <SelectValue placeholder="Danh mục" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="food">Food</SelectItem>
-                      <SelectItem value="beverage">Beverage</SelectItem>
+                      <SelectItem value="all">Tất Cả Danh Mục</SelectItem>
+                      <SelectItem value="food">Đồ Ăn</SelectItem>
+                      <SelectItem value="beverage">Đồ Uống</SelectItem>
                       <SelectItem value="office-supplies">
-                        Office Supplies
+                        Văn Phòng Phẩm
                       </SelectItem>
-                      <SelectItem value="merchandise">Merchandise</SelectItem>
-                      <SelectItem value="combo">Combos</SelectItem>
+                      <SelectItem value="merchandise">Hàng Hóa</SelectItem>
+                      <SelectItem value="combo">Combo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -794,8 +790,8 @@ export default function CreateBookingPage() {
                   {filteredInventory.length === 0 ? (
                     <div className="col-span-2 text-center py-8 text-gray-500">
                       {viewMode === "combos"
-                        ? "No combo packages found"
-                        : "No items found"}
+                        ? "Không tìm thấy gói combo"
+                        : "Không tìm thấy món nào"}
                     </div>
                   ) : viewMode === "combos" ? (
                     // Combo Packages View
@@ -815,7 +811,7 @@ export default function CreateBookingPage() {
                                 {combo.name}
                               </h4>
                               {selectedCombo?._id === combo._id && (
-                                <Badge className="bg-blue-600">Selected</Badge>
+                                <Badge className="bg-blue-600">Đã Chọn</Badge>
                               )}
                             </div>
                             <p className="text-sm text-gray-600 mb-2">
@@ -826,7 +822,7 @@ export default function CreateBookingPage() {
                             {combo.duration && (
                               <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
                                 <Clock className="h-3 w-3" />
-                                <span>{combo.duration} hours included</span>
+                                <span>{combo.duration} giờ bao gồm</span>
                               </div>
                             )}
 
@@ -835,7 +831,7 @@ export default function CreateBookingPage() {
                               combo.includedItems.length > 0 && (
                                 <div className="text-xs text-gray-500 mb-2">
                                   <span className="font-semibold">
-                                    Includes:
+                                    Bao gồm:
                                   </span>
                                   <ul className="list-disc list-inside ml-2 mt-1">
                                     {combo.includedItems.map((item, idx) => (
@@ -859,7 +855,7 @@ export default function CreateBookingPage() {
                               onClick={clearCombo}
                             >
                               <X className="h-4 w-4 mr-1" />
-                              Remove
+                              Gỡ Bỏ
                             </Button>
                           ) : (
                             <Button
@@ -869,12 +865,12 @@ export default function CreateBookingPage() {
                               disabled={combo.quantity <= 0}
                             >
                               <Check className="h-4 w-4 mr-1" />
-                              Select
+                              Chọn
                             </Button>
                           )}
                         </div>
                         <p className="text-xs text-gray-400 mt-2">
-                          Available: {combo.quantity} packages
+                          Có sẵn: {combo.quantity} gói
                         </p>
                       </div>
                     ))
@@ -913,11 +909,11 @@ export default function CreateBookingPage() {
                             disabled={item.quantity <= 0}
                           >
                             <Plus className="h-4 w-4 mr-1" />
-                            Add
+                            Thêm
                           </Button>
                         </div>
                         <p className="text-xs text-gray-400 mt-1">
-                          Stock: {item.quantity} {item.unit}
+                          Tồn kho: {item.quantity} {item.unit}
                         </p>
                       </div>
                     ))
@@ -935,7 +931,7 @@ export default function CreateBookingPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <ShoppingCart className="h-5 w-5" />
-                    Cart ({cart.length})
+                    Giỏ Hàng ({cart.length})
                   </CardTitle>
                   {cart.length > 0 && (
                     <Button
@@ -944,7 +940,7 @@ export default function CreateBookingPage() {
                       size="sm"
                       onClick={clearCart}
                     >
-                      Clear
+                      Xóa
                     </Button>
                   )}
                 </div>
@@ -953,7 +949,7 @@ export default function CreateBookingPage() {
                 {cart.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <ShoppingCart className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>No items in cart</p>
+                    <p>Không có món trong giỏ</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -965,7 +961,7 @@ export default function CreateBookingPage() {
                               {item.name}
                             </h4>
                             <p className="text-xs text-gray-500">
-                              ${item.price.toFixed(2)} each
+                              ${item.price.toFixed(2)} mỗi
                             </p>
                           </div>
                           <Button
@@ -1028,18 +1024,18 @@ export default function CreateBookingPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CreditCard className="h-5 w-5" />
-                  Payment Summary
+                  Tổng Thanh Toán
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Breakdown */}
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Desk Rental</span>
+                    <span className="text-gray-600">Thuê Bàn</span>
                     <span className="font-medium">${deskCost.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Items ({cart.length})</span>
+                    <span className="text-gray-600">Món ({cart.length})</span>
                     <span className="font-medium">
                       ${inventoryTotal.toFixed(2)}
                     </span>
@@ -1048,7 +1044,7 @@ export default function CreateBookingPage() {
                   <Separator />
 
                   <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
-                    <span className="text-lg font-semibold">Total</span>
+                    <span className="text-lg font-semibold">Tổng Cộng</span>
                     <span className="text-2xl font-bold">
                       ${grandTotal.toFixed(2)}
                     </span>
@@ -1057,7 +1053,7 @@ export default function CreateBookingPage() {
 
                 {/* Payment Status */}
                 <div className="space-y-3">
-                  <Label>Payment Status</Label>
+                  <Label>Trạng Thái Thanh Toán</Label>
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -1067,7 +1063,7 @@ export default function CreateBookingPage() {
                       className="flex-1"
                       onClick={() => setPaymentStatus("pending")}
                     >
-                      Pending
+                      Chờ
                     </Button>
                     <Button
                       type="button"
@@ -1075,7 +1071,7 @@ export default function CreateBookingPage() {
                       className="flex-1"
                       onClick={handlePayNow}
                     >
-                      Paid
+                      Đã Thanh Toán
                     </Button>
                   </div>
                   <Badge
@@ -1083,7 +1079,11 @@ export default function CreateBookingPage() {
                       paymentStatus
                     )}`}
                   >
-                    {paymentStatus.toUpperCase()}
+                    {paymentStatus === "pending"
+                      ? "CHỜ THANH TOÁN"
+                      : paymentStatus === "paid"
+                      ? "ĐÃ THANH TOÁN"
+                      : "ĐÃ HOÀN TIỀN"}
                   </Badge>
                 </div>
 
@@ -1095,15 +1095,15 @@ export default function CreateBookingPage() {
                   disabled={isSubmitting || grandTotal === 0}
                 >
                   {isSubmitting
-                    ? "Creating Booking..."
-                    : `Create Booking - $${grandTotal.toFixed(2)}`}
+                    ? "Đang tạo đặt bàn..."
+                    : `Tạo Đặt Bàn - $${grandTotal.toFixed(2)}`}
                 </Button>
 
                 {/* Info */}
                 <p className="text-xs text-gray-500 text-center">
                   {paymentStatus === "paid"
-                    ? "Payment will be marked as completed"
-                    : "Payment can be processed later"}
+                    ? "Thanh toán sẽ được đánh dấu hoàn thành"
+                    : "Có thể thanh toán sau"}
                 </p>
               </CardContent>
             </Card>

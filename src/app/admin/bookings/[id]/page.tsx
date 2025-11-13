@@ -253,24 +253,24 @@ export default function BookingDetailPage() {
     const url = generatePublicUrl();
     if (url) {
       navigator.clipboard.writeText(url);
-      toast.success("Public URL copied to clipboard!");
+      toast.success("Đã sao chép URL công khai vào clipboard!");
     }
   };
 
   const addItemToCart = () => {
     if (!selectedItem || quantity < 1) {
-      toast.error("Please select an item and specify quantity");
+      toast.error("Vui lòng chọn món và số lượng");
       return;
     }
 
     const item = inventory?.find((i) => i._id === selectedItem);
     if (!item) {
-      toast.error("Selected item not found");
+      toast.error("Không tìm thấy món đã chọn");
       return;
     }
 
     if (item.quantity < quantity) {
-      toast.error("Insufficient stock available");
+      toast.error("Không đủ tồn kho");
       return;
     }
 
@@ -299,7 +299,7 @@ export default function BookingDetailPage() {
 
     setSelectedItem("");
     setQuantity(1);
-    toast.success("Item added to cart!");
+    toast.success("Đã thêm món vào giỏ!");
   };
 
   const removeItemFromCart = (itemId: string) => {
@@ -329,7 +329,7 @@ export default function BookingDetailPage() {
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
-      toast.error("Please add items to cart before submitting");
+      toast.error("Vui lòng thêm món vào giỏ trước khi gửi");
       return;
     }
 
@@ -352,13 +352,13 @@ export default function BookingDetailPage() {
         body: orderData,
       });
 
-      toast.success("Order added successfully!");
+      toast.success("Đã thêm đơn hàng thành công!");
       clearCart();
       setIsOrderDialogOpen(false);
       mutateOrders();
     } catch (error) {
       console.error("Error submitting order:", error);
-      toast.error("Failed to submit order");
+      toast.error("Không thể gửi đơn hàng");
     }
   };
 
@@ -369,10 +369,10 @@ export default function BookingDetailPage() {
         body: { status: newStatus },
       });
       mutateOrders();
-      toast.success("Order status updated successfully!");
+      toast.success("Đã cập nhật trạng thái đơn hàng thành công!");
     } catch (error) {
       console.error("Error updating order status:", error);
-      toast.error("Failed to update order status");
+      toast.error("Không thể cập nhật trạng thái đơn hàng");
     }
   };
 
@@ -383,10 +383,10 @@ export default function BookingDetailPage() {
         body: { status: newStatus },
       });
       mutateBooking();
-      toast.success("Booking status updated successfully!");
+      toast.success("Đã cập nhật trạng thái đặt bàn thành công!");
     } catch (error) {
       console.error("Error updating booking status:", error);
-      toast.error("Failed to update booking status");
+      toast.error("Không thể cập nhật trạng thái đặt bàn");
     }
   };
 
@@ -421,7 +421,7 @@ export default function BookingDetailPage() {
   if (bookingLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading booking details...</div>
+        <div className="text-lg">Đang tải chi tiết đặt bàn...</div>
       </div>
     );
   }
@@ -430,11 +430,11 @@ export default function BookingDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
         <div className="text-lg text-red-600">
-          Failed to load booking details
+          Không thể tải chi tiết đặt bàn
         </div>
         <Button onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Go Back
+          Quay Lại
         </Button>
       </div>
     );
@@ -450,11 +450,11 @@ export default function BookingDetailPage() {
         <div className="flex items-center space-x-4">
           <Button variant="ghost" onClick={() => router.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Bookings
+            Quay Lại Danh Sách
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Booking Details</h1>
-            <p className="text-gray-500">Booking ID: {booking._id}</p>
+            <h1 className="text-3xl font-bold">Chi Tiết Đặt Bàn</h1>
+            <p className="text-gray-500">Mã Đặt Bàn: {booking._id}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -463,7 +463,7 @@ export default function BookingDetailPage() {
             className="bg-green-600 hover:bg-green-700"
           >
             <Receipt className="w-4 h-4 mr-2" />
-            View Billing
+            Xem Hóa Đơn
           </Button>
           {canCheckOut() && (
             <Button
@@ -471,7 +471,7 @@ export default function BookingDetailPage() {
               className="bg-blue-600 hover:bg-blue-700"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Complete & Pay / Trả bàn
+              Hoàn Tất & Thanh Toán / Trả bàn
             </Button>
           )}
         </div>
@@ -483,13 +483,11 @@ export default function BookingDetailPage() {
           {/* Customer Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Customer Information</CardTitle>
+              <CardTitle>Thông Tin Khách Hàng</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium text-gray-500">
-                  Name
-                </Label>
+                <Label className="text-sm font-medium text-gray-500">Tên</Label>
                 <p className="text-lg font-semibold">{booking.customer.name}</p>
               </div>
               <div>
@@ -500,7 +498,7 @@ export default function BookingDetailPage() {
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-500">
-                  Phone
+                  Số Điện Thoại
                 </Label>
                 <p>{booking.customer.phone}</p>
               </div>
@@ -510,27 +508,25 @@ export default function BookingDetailPage() {
           {/* Booking Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Booking Information</CardTitle>
+              <CardTitle>Thông Tin Đặt Bàn</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium text-gray-500">
-                  Desk
-                </Label>
+                <Label className="text-sm font-medium text-gray-500">Bàn</Label>
                 <p className="text-lg font-semibold">
-                  Desk {booking.deskNumber}
+                  Bàn {booking.deskNumber}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Start Time
+                    Giờ Bắt Đầu
                   </Label>
                   <p>{formatDateTime(booking.startTime)}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    End Time
+                    Giờ Kết Thúc
                   </Label>
                   <p>{formatDateTime(booking.endTime)}</p>
                 </div>
@@ -538,7 +534,7 @@ export default function BookingDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Status
+                    Trạng Thái
                   </Label>
                   <div className="mt-1">
                     <select
@@ -550,11 +546,11 @@ export default function BookingDetailPage() {
                         booking.status
                       )}`}
                     >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="checked-in">Checked In</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="pending">Chờ</option>
+                      <option value="confirmed">Đã Xác Nhận</option>
+                      <option value="checked-in">Đã Check-in</option>
+                      <option value="completed">Hoàn Tất</option>
+                      <option value="cancelled">Đã Hủy</option>
                     </select>
                   </div>
                 </div>
@@ -565,14 +561,14 @@ export default function BookingDetailPage() {
                   <p>
                     {booking.checkedInAt
                       ? formatDateTime(booking.checkedInAt)
-                      : "Not checked in"}
+                      : "Chưa check-in"}
                   </p>
                 </div>
               </div>
               {booking.notes && (
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Notes
+                    Ghi Chú
                   </Label>
                   <p className="text-sm bg-gray-50 p-3 rounded-md">
                     {booking.notes}
@@ -585,13 +581,13 @@ export default function BookingDetailPage() {
           {/* Payment Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Payment Information</CardTitle>
+              <CardTitle>Thông Tin Thanh Toán</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Total Amount
+                    Tổng Cộng
                   </Label>
                   <p className="text-lg font-bold">
                     ${booking.totalAmount?.toFixed(2) || "0.00"}
@@ -599,7 +595,7 @@ export default function BookingDetailPage() {
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Payment Status
+                    Trạng Thái Thanh Toán
                   </Label>
                   <div className="mt-1">
                     <Badge
@@ -613,7 +609,7 @@ export default function BookingDetailPage() {
               {booking.paymentMethod && (
                 <div>
                   <Label className="text-sm font-medium text-gray-500">
-                    Payment Method
+                    Phương Thức Thanh Toán
                   </Label>
                   <p>{booking.paymentMethod}</p>
                 </div>
@@ -626,10 +622,10 @@ export default function BookingDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <QrCode className="w-5 h-5" />
-                <span>Public Booking URL</span>
+                <span>Đường Dẫn Công Khai</span>
               </CardTitle>
               <CardDescription>
-                Share this QR code or URL with the customer for easy access
+                Chia sẻ mã QR hoặc URL này với khách hàng để truy cập dễ dàng
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -659,10 +655,10 @@ export default function BookingDetailPage() {
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-md">
                         <DialogHeader>
-                          <DialogTitle>Booking QR Code</DialogTitle>
+                          <DialogTitle>Mã QR Đặt Bàn</DialogTitle>
                           <DialogDescription>
-                            Customer can scan this QR code to access their
-                            booking
+                            Khách hàng có thể quét mã QR này để truy cập đặt bàn
+                            của họ
                           </DialogDescription>
                         </DialogHeader>
                         <div className="flex justify-center py-4">
@@ -695,8 +691,8 @@ export default function BookingDetailPage() {
                 <div className="text-center py-8">
                   <div className="text-gray-500 mb-4">
                     {booking?.status === "cancelled"
-                      ? "Cannot generate public URL for cancelled bookings"
-                      : "Generating public URL and QR code..."}
+                      ? "Không thể tạo URL công khai cho đặt bàn đã hủy"
+                      : "Đang tạo URL công khai và mã QR..."}
                   </div>
                   {booking?.status !== "cancelled" && (
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -713,7 +709,7 @@ export default function BookingDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Extra Services / Orders
+                Dịch Vụ Thêm / Đơn Hàng
                 <Dialog
                   open={isOrderDialogOpen}
                   onOpenChange={(open) => {
@@ -728,34 +724,34 @@ export default function BookingDetailPage() {
                   <DialogTrigger asChild>
                     <Button size="sm">
                       <Plus className="w-4 h-4 mr-2" />
-                      Add Service
+                      Thêm Dịch Vụ
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                      <DialogTitle>Add Extra Service</DialogTitle>
+                      <DialogTitle>Thêm Dịch Vụ Phụ</DialogTitle>
                       <DialogDescription>
-                        Add additional services or items to this booking
+                        Thêm dịch vụ hoặc món phụ vào đặt bàn này
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
                       {/* Add Item Section */}
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor="item">Select Item</Label>
+                          <Label htmlFor="item">Chọn Món</Label>
                           <Select
                             value={selectedItem}
                             onValueChange={setSelectedItem}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Choose an item..." />
+                              <SelectValue placeholder="Chọn một món..." />
                             </SelectTrigger>
                             <SelectContent>
                               {inventory?.map((item) => (
                                 <SelectItem key={item._id} value={item._id}>
-                                  {item.name} - ${item.price.toFixed(2)} (Stock:{" "}
-                                  {item.quantity}){" "}
-                                  {!item.isActive && " (Inactive)"}
+                                  {item.name} - ${item.price.toFixed(2)} (Tồn
+                                  kho: {item.quantity}){" "}
+                                  {!item.isActive && " (Ngừng hoạt động)"}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -763,7 +759,7 @@ export default function BookingDetailPage() {
                         </div>
                         <div className="flex gap-4">
                           <div className="flex-1">
-                            <Label htmlFor="quantity">Quantity</Label>
+                            <Label htmlFor="quantity">Số Lượng</Label>
                             <Input
                               id="quantity"
                               type="number"
@@ -779,7 +775,7 @@ export default function BookingDetailPage() {
                               onClick={addItemToCart}
                               disabled={!selectedItem}
                             >
-                              Add to Cart
+                              Thêm Vào Giỏ
                             </Button>
                           </div>
                         </div>
@@ -791,7 +787,7 @@ export default function BookingDetailPage() {
                           <Separator />
                           <div>
                             <h4 className="font-semibold mb-3">
-                              Order Cart ({cart.length} items)
+                              Giỏ Đơn Hàng ({cart.length} món)
                             </h4>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {cart.map((cartItem) => (
@@ -804,7 +800,7 @@ export default function BookingDetailPage() {
                                       {cartItem.name}
                                     </div>
                                     <div className="text-sm text-gray-500">
-                                      ${cartItem.price.toFixed(2)} each
+                                      ${cartItem.price.toFixed(2)} mỗi
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -841,7 +837,7 @@ export default function BookingDetailPage() {
                             </div>
                             <div className="mt-3 pt-3 border-t">
                               <div className="flex justify-between items-center font-semibold">
-                                <span>Total:</span>
+                                <span>Tổng:</span>
                                 <span>${getCartTotal().toFixed(2)}</span>
                               </div>
                             </div>
@@ -854,7 +850,7 @@ export default function BookingDetailPage() {
                         <div>
                           {cart.length > 0 && (
                             <Button variant="outline" onClick={clearCart}>
-                              Clear Cart
+                              Xóa Giỏ
                             </Button>
                           )}
                         </div>
@@ -863,13 +859,13 @@ export default function BookingDetailPage() {
                             variant="outline"
                             onClick={() => setIsOrderDialogOpen(false)}
                           >
-                            Cancel
+                            Hủy
                           </Button>
                           <Button
                             onClick={handleSubmitOrder}
                             disabled={cart.length === 0}
                           >
-                            Submit Order ({cart.length} items)
+                            Gửi Đơn ({cart.length} món)
                           </Button>
                         </div>
                       </div>
@@ -878,12 +874,12 @@ export default function BookingDetailPage() {
                 </Dialog>
               </CardTitle>
               <CardDescription>
-                Additional services and items for this booking
+                Dịch vụ và món phụ cho đặt bàn này
               </CardDescription>
             </CardHeader>
             <CardContent>
               {ordersLoading ? (
-                <div className="text-center py-4">Loading orders...</div>
+                <div className="text-center py-4">Đang tải đơn hàng...</div>
               ) : orders && orders.length > 0 ? (
                 <div className="space-y-4">
                   {orders.map((order) => (
@@ -891,7 +887,7 @@ export default function BookingDetailPage() {
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h4 className="font-semibold">
-                            Order #{order._id.slice(-8)}
+                            Đơn Hàng #{order._id.slice(-8)}
                           </h4>
                           <p className="text-sm text-gray-500">
                             {formatDateTime(order.createdAt)}
@@ -906,12 +902,12 @@ export default function BookingDetailPage() {
                             order.status
                           )}`}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="preparing">Preparing</option>
-                          <option value="ready">Ready</option>
-                          <option value="delivered">Delivered</option>
-                          <option value="cancelled">Cancelled</option>
+                          <option value="pending">Chờ</option>
+                          <option value="confirmed">Đã Xác Nhận</option>
+                          <option value="preparing">Đang Chuẩn Bị</option>
+                          <option value="ready">Sẵn Sàng</option>
+                          <option value="delivered">Đã Giao</option>
+                          <option value="cancelled">Đã Hủy</option>
                         </select>
                       </div>
                       <div className="space-y-2">
@@ -931,7 +927,7 @@ export default function BookingDetailPage() {
                       </div>
                       <Separator className="my-2" />
                       <div className="flex justify-between font-semibold">
-                        <span>Total</span>
+                        <span>Tổng</span>
                         <span>${order.total.toFixed(2)}</span>
                       </div>
                     </div>
@@ -939,8 +935,7 @@ export default function BookingDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  No additional orders yet. Add extra services using the button
-                  above.
+                  Chưa có đơn hàng phụ. Thêm dịch vụ bằng nút ở trên.
                 </div>
               )}
             </CardContent>
