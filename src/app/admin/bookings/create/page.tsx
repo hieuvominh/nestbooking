@@ -388,10 +388,11 @@ export default function CreateBookingPage() {
         ...(checkedInAt && { checkedInAt }),
       };
 
-      const bookingResponse: { booking?: { _id: string }; _id?: string } = await apiCall("/api/bookings", {
-        method: "POST",
-        body: bookingData,
-      });
+      const bookingResponse: { booking?: { _id: string }; _id?: string } =
+        await apiCall("/api/bookings", {
+          method: "POST",
+          body: bookingData,
+        });
 
       // Extract booking ID from nested response structure
       const bookingId = bookingResponse?.booking?._id || bookingResponse?._id;

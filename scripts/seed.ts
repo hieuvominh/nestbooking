@@ -5,7 +5,7 @@ import { User, Desk, InventoryItem, Booking, Order } from '../src/models';
 async function seedDatabase() {
   try {
     // Connect to MongoDB
-    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bookingcoo';
+    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://hieu:10761521Nana%3A%29@cluster0.5tyjdvr.mongodb.net/bookingcoo?retryWrites=true&w=majority';
     await mongoose.connect(MONGODB_URI);
     console.log('Connected to MongoDB');
 
