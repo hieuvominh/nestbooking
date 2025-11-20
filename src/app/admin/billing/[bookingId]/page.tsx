@@ -307,7 +307,12 @@ export default function BillingPage() {
 
     setIsProcessingPayment(true);
     try {
-      const updateData: any = {
+      const updateData: {
+        status: string;
+        completedAt: string;
+        totalAmount: number;
+        paymentStatus?: string;
+      } = {
         status: "completed",
         completedAt: new Date().toISOString(),
         totalAmount: finalTotal, // Always update with final calculated total

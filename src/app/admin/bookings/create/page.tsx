@@ -388,7 +388,7 @@ export default function CreateBookingPage() {
         ...(checkedInAt && { checkedInAt }),
       };
 
-      const bookingResponse: any = await apiCall("/api/bookings", {
+      const bookingResponse: { booking?: { _id: string }; _id?: string } = await apiCall("/api/bookings", {
         method: "POST",
         body: bookingData,
       });
