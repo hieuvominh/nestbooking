@@ -134,7 +134,7 @@ export default function DesksPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        Loading desks...
+        Đang tải danh sách bàn...
       </div>
     );
   }
@@ -143,37 +143,39 @@ export default function DesksPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Desk Management</h1>
-          <p className="text-gray-600">Manage your co-working desks</p>
+          <h1 className="text-2xl font-bold text-gray-900">Quản lý bàn</h1>
+          <p className="text-gray-600">Quản lý các bàn làm việc chung</p>
         </div>
-        <Button onClick={() => setShowCreateForm(true)}>Add New Desk</Button>
+        <Button onClick={() => setShowCreateForm(true)}>Thêm bàn mới</Button>
       </div>
 
       {/* Create/Edit Form */}
       {showCreateForm && (
         <Card>
           <CardHeader>
-            <CardTitle>{editingDesk ? "Edit Desk" : "Add New Desk"}</CardTitle>
+            <CardTitle>
+              {editingDesk ? "Chỉnh sửa bàn" : "Thêm bàn mới"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Label*
+                    Ký hiệu*
                   </label>
                   <Input
                     value={formData.label}
                     onChange={(e) =>
                       setFormData({ ...formData, label: e.target.value })
                     }
-                    placeholder="e.g., A1, B2"
+                    placeholder="vd: A1, B2"
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Hourly Rate*
+                    Giá/giờ*
                   </label>
                   <Input
                     type="number"
@@ -191,19 +193,19 @@ export default function DesksPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Location
+                    Vị trí
                   </label>
                   <Input
                     value={formData.location}
                     onChange={(e) =>
                       setFormData({ ...formData, location: e.target.value })
                     }
-                    placeholder="e.g., Window Side, Center"
+                    placeholder="vd: Gần cửa sổ, Trung tâm"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Status
+                    Trạng thái
                   </label>
                   <select
                     value={formData.status}
@@ -215,28 +217,26 @@ export default function DesksPage() {
                     }
                     className="w-full p-2 border border-gray-300 rounded-md"
                   >
-                    <option value="available">Available</option>
-                    <option value="maintenance">Maintenance</option>
+                    <option value="available">Còn trống</option>
+                    <option value="maintenance">Bảo trì</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Description
-                </label>
+                <label className="block text-sm font-medium mb-1">Mô tả</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="Optional description"
+                  placeholder="Mô tả (tùy chọn)"
                   className="w-full p-2 border border-gray-300 rounded-md"
                   rows={3}
                 />
               </div>
               <div className="flex space-x-2">
                 <Button type="submit">
-                  {editingDesk ? "Update Desk" : "Create Desk"}
+                  {editingDesk ? "Cập nhật bàn" : "Tạo bàn"}
                 </Button>
                 <Button
                   type="button"
@@ -253,7 +253,7 @@ export default function DesksPage() {
                     });
                   }}
                 >
-                  Cancel
+                  Hủy
                 </Button>
               </div>
             </form>
@@ -264,18 +264,18 @@ export default function DesksPage() {
       {/* Desks Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Desks ({desks?.length || 0})</CardTitle>
-          <CardDescription>Manage desk status and information</CardDescription>
+          <CardTitle>Tất cả bàn ({desks?.length || 0})</CardTitle>
+          <CardDescription>Quản lý trạng thái và thông tin bàn</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Label</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Rate/Hour</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>Ký hiệu</TableHead>
+                <TableHead>Vị trí</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Giá/giờ</TableHead>
+                <TableHead>Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -293,20 +293,20 @@ export default function DesksPage() {
                         desk.status
                       )}`}
                     >
-                      <option value="available">Available</option>
-                      <option value="reserved">Reserved</option>
-                      <option value="occupied">Occupied</option>
-                      <option value="maintenance">Maintenance</option>
+                      <option value="available">Còn trống</option>
+                      <option value="reserved">Đã đặt</option>
+                      <option value="occupied">Đang sử dụng</option>
+                      <option value="maintenance">Bảo trì</option>
                     </select>
                   </TableCell>
-                  <TableCell>${desk.hourlyRate}/hr</TableCell>
+                  <TableCell>${desk.hourlyRate}/giờ</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleEdit(desk)}
                     >
-                      Edit
+                      Sửa
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -316,7 +316,7 @@ export default function DesksPage() {
 
           {(!desks || desks.length === 0) && (
             <div className="text-center py-8 text-gray-500">
-              No desks found. Add your first desk to get started.
+              Không tìm thấy bàn. Thêm bàn đầu tiên để bắt đầu.
             </div>
           )}
         </CardContent>

@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OrderEditModal } from "@/components/modals";
+import { formatCurrency } from "@/lib/currency";
 
 interface Order {
   _id: string;
@@ -134,10 +135,10 @@ export default function OrdersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Orders Management
-          </h1>
-          <p className="text-gray-600">Track and manage customer orders</p>
+          <h1 className="text-2xl font-bold text-gray-900">Quản lý đơn hàng</h1>
+          <p className="text-gray-600">
+            Theo dõi và quản lý đơn hàng của khách
+          </p>
         </div>
       </div>
 
@@ -145,21 +146,23 @@ export default function OrdersPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Active Orders ({ordersResponse?.orders?.length || 0})
+            Đơn hàng đang hoạt động ({ordersResponse?.orders?.length || 0})
           </CardTitle>
-          <CardDescription>Manage order status and fulfillment</CardDescription>
+          <CardDescription>
+            Quản lý trạng thái và thực hiện đơn hàng
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Ordered At</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>Mã đơn</TableHead>
+                <TableHead>Khách hàng</TableHead>
+                <TableHead>Mặt hàng</TableHead>
+                <TableHead>Tổng</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Đặt lúc</TableHead>
+                <TableHead>Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -170,10 +173,18 @@ export default function OrdersPage() {
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">
-                      {order.bookingId.customer.name}
+                      {order.bookingId &&
+                      typeof order.bookingId === "object" &&
+                      order.bookingId.customer
+                        ? order.bookingId.customer.name
+                        : "—"}
                     </div>
                     <div className="text-sm text-gray-500">
-                      {order.bookingId.customer.email}
+                      {order.bookingId &&
+                      typeof order.bookingId === "object" &&
+                      order.bookingId.customer
+                        ? order.bookingId.customer.email
+                        : "—"}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -186,7 +197,7 @@ export default function OrdersPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
-                    ${order.total.toFixed(2)}
+                    {formatCurrency(order.total)}
                   </TableCell>
                   <TableCell>
                     <select
@@ -198,12 +209,12 @@ export default function OrdersPage() {
                         order.status
                       )}`}
                     >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="preparing">Preparing</option>
-                      <option value="ready">Ready</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="pending">Đang chờ</option>
+                      <option value="confirmed">Đã xác nhận</option>
+                      <option value="preparing">Đang chuẩn bị</option>
+                      <option value="ready">Sẵn sàng</option>
+                      <option value="delivered">Đã giao</option>
+                      <option value="cancelled">Đã hủy</option>
                     </select>
                   </TableCell>
                   <TableCell>{formatDateTime(order.orderedAt)}</TableCell>
@@ -214,7 +225,7 @@ export default function OrdersPage() {
                         size="sm"
                         onClick={() => handleEdit(order)}
                       >
-                        Edit
+                        Sửa
                       </Button>
                     </div>
                   </TableCell>
@@ -226,7 +237,7 @@ export default function OrdersPage() {
           {!ordersResponse?.orders ||
             (ordersResponse.orders.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                No orders found.
+                Không tìm thấy đơn hàng.
               </div>
             ))}
         </CardContent>

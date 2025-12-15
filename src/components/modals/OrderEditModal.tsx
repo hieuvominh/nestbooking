@@ -30,6 +30,7 @@ import {
   FileText,
   DollarSign,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 const orderSchema = z.object({
   status: z.enum([
@@ -158,7 +159,7 @@ export function OrderEditModal({
           <div className="p-2 bg-blue-100 rounded-lg">
             <ShoppingCart className="h-5 w-5 text-blue-600" />
           </div>
-          <span>Edit Order</span>
+          <span>Chỉnh sửa đơn hàng</span>
         </div>
       }
       onSave={handleSave}
@@ -173,13 +174,13 @@ export function OrderEditModal({
             <div className="flex items-center gap-2 mb-4">
               <User className="h-5 w-5 text-slate-600" />
               <h3 className="font-semibold text-slate-800">
-                Customer Information
+                Thông tin khách hàng
               </h3>
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-slate-500" />
-                <span className="font-medium text-slate-600">Customer:</span>
+                <span className="font-medium text-slate-600">Khách hàng:</span>
                 <span className="text-slate-900">
                   {order.bookingId.customer.name}
                 </span>
@@ -193,14 +194,14 @@ export function OrderEditModal({
               </div>
               <div className="flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4 text-slate-500" />
-                <span className="font-medium text-slate-600">Order ID:</span>
+                <span className="font-medium text-slate-600">Mã đơn:</span>
                 <span className="text-slate-900 font-mono">
                   {order._id.slice(-8)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-slate-500" />
-                <span className="font-medium text-slate-600">Ordered:</span>
+                <span className="font-medium text-slate-600">Đặt lúc:</span>
                 <span className="text-slate-900">
                   {new Date(order.orderedAt).toLocaleString()}
                 </span>
@@ -212,7 +213,7 @@ export function OrderEditModal({
           <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
             <div className="flex items-center gap-2 mb-4">
               <Package className="h-5 w-5 text-blue-600" />
-              <h3 className="font-semibold text-blue-800">Order Items</h3>
+              <h3 className="font-semibold text-blue-800">Mặt hàng</h3>
             </div>
             <div className="space-y-3">
               {order.items.map((item, index) => (
@@ -227,16 +228,16 @@ export function OrderEditModal({
                         {item.name}
                       </span>
                       <p className="text-xs text-slate-500">
-                        Quantity: {item.quantity}
+                        Số lượng: {item.quantity}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <span className="font-semibold text-slate-900">
-                      ${item.subtotal.toFixed(2)}
+                      {formatCurrency(item.subtotal)}
                     </span>
                     <p className="text-xs text-slate-500">
-                      ${item.price.toFixed(2)} each
+                      {formatCurrency(item.price)} mỗi cái
                     </p>
                   </div>
                 </div>
@@ -244,12 +245,10 @@ export function OrderEditModal({
               <div className="flex items-center justify-between pt-3 border-t border-blue-200">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-blue-600" />
-                  <span className="font-semibold text-blue-800">
-                    Total Amount
-                  </span>
+                  <span className="font-semibold text-blue-800">Tổng tiền</span>
                 </div>
                 <span className="text-xl font-bold text-blue-900">
-                  ${order.total.toFixed(2)}
+                  {formatCurrency(order.total)}
                 </span>
               </div>
             </div>
@@ -262,7 +261,9 @@ export function OrderEditModal({
               <div className="bg-green-50 rounded-xl p-6 border border-green-100">
                 <div className="flex items-center gap-2 mb-4">
                   <CheckCircle className="h-5 w-5 text-green-600" />
-                  <h3 className="font-semibold text-green-800">Order Status</h3>
+                  <h3 className="font-semibold text-green-800">
+                    Trạng thái đơn
+                  </h3>
                 </div>
 
                 <FormField
@@ -272,7 +273,7 @@ export function OrderEditModal({
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4" />
-                        Status
+                        Trạng thái
                       </FormLabel>
                       <Select
                         onValueChange={field.onChange}
@@ -287,37 +288,37 @@ export function OrderEditModal({
                           <SelectItem value="pending">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                              Pending
+                              Đang chờ
                             </div>
                           </SelectItem>
                           <SelectItem value="confirmed">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-blue-400" />
-                              Confirmed
+                              Đã xác nhận
                             </div>
                           </SelectItem>
                           <SelectItem value="preparing">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-orange-400" />
-                              Preparing
+                              Đang chuẩn bị
                             </div>
                           </SelectItem>
                           <SelectItem value="ready">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-green-400" />
-                              Ready
+                              Sẵn sàng
                             </div>
                           </SelectItem>
                           <SelectItem value="delivered">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-gray-400" />
-                              Delivered
+                              Đã giao
                             </div>
                           </SelectItem>
                           <SelectItem value="cancelled">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full bg-red-400" />
-                              Cancelled
+                              Đã hủy
                             </div>
                           </SelectItem>
                         </SelectContent>
@@ -332,7 +333,9 @@ export function OrderEditModal({
               <div className="bg-amber-50 rounded-xl p-6 border border-amber-100">
                 <div className="flex items-center gap-2 mb-4">
                   <FileText className="h-5 w-5 text-amber-600" />
-                  <h3 className="font-semibold text-amber-800">Order Notes</h3>
+                  <h3 className="font-semibold text-amber-800">
+                    Ghi chú đơn hàng
+                  </h3>
                 </div>
 
                 <FormField
@@ -342,11 +345,11 @@ export function OrderEditModal({
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <FileText className="h-4 w-4" />
-                        Notes
+                        Ghi chú
                       </FormLabel>
                       <FormControl>
                         <textarea
-                          placeholder="Add any special instructions or notes about this order..."
+                          placeholder="Thêm hướng dẫn hoặc ghi chú đặc biệt cho đơn hàng..."
                           className="w-full h-20 px-4 py-3 border border-amber-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none transition-all duration-200"
                           {...field}
                         />

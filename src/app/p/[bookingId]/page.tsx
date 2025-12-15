@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatCurrency } from "@/lib/currency";
 
 interface Booking {
   _id: string;
@@ -521,7 +522,7 @@ export default function PublicBookingPage() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xl font-bold text-green-600">
-                            ${item.price.toFixed(2)}
+                            {formatCurrency(item.price)}
                           </span>
                           {cartQuantity > 0 && (
                             <span className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded">
@@ -611,7 +612,7 @@ export default function PublicBookingPage() {
                       {cart.map((item) => (
                         <TableRow key={item.itemId}>
                           <TableCell>{item.itemName}</TableCell>
-                          <TableCell>${item.price.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(item.price)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button
@@ -646,7 +647,7 @@ export default function PublicBookingPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            ${(item.price * item.quantity).toFixed(2)}
+                            {formatCurrency(item.price * item.quantity)}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -664,7 +665,7 @@ export default function PublicBookingPage() {
                   </Table>
                   <div className="mt-4 flex justify-between items-center">
                     <span className="text-lg font-semibold">
-                      Total: ${getCartTotal().toFixed(2)}
+                      Total: {formatCurrency(getCartTotal())}
                     </span>
                     <Button
                       onClick={submitOrder}
@@ -709,7 +710,7 @@ export default function PublicBookingPage() {
                         {order.status}
                       </span>
                       <span className="font-semibold">
-                        ${(order.totalAmount || 0).toFixed(2)}
+                        {formatCurrency(order.totalAmount || 0)}
                       </span>
                     </div>
                   </div>
@@ -728,12 +729,13 @@ export default function PublicBookingPage() {
                           <TableCell>
                             {item.name || item.itemName || "Unknown Item"}
                           </TableCell>
-                          <TableCell>${(item.price || 0).toFixed(2)}</TableCell>
+                          <TableCell>
+                            {formatCurrency(item.price || 0)}
+                          </TableCell>
                           <TableCell>{item.quantity || 0}</TableCell>
                           <TableCell>
-                            $
-                            {((item.price || 0) * (item.quantity || 0)).toFixed(
-                              2
+                            {formatCurrency(
+                              (item.price || 0) * (item.quantity || 0)
                             )}
                           </TableCell>
                         </TableRow>
@@ -756,7 +758,7 @@ export default function PublicBookingPage() {
               ))}
               <div className="mt-4 text-right">
                 <span className="text-lg font-semibold">
-                  Total Spent: ${getOrdersTotal().toFixed(2)}
+                  Total Spent: {formatCurrency(getOrdersTotal())}
                 </span>
               </div>
             </CardContent>

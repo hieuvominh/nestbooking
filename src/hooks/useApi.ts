@@ -11,15 +11,25 @@ interface ApiError {
   error: string;
 }
 
-const fetcher = (url: string, token?: string) => 
+const fetcher = (url: string, token?: string) =>
   fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   }).then(async (res) => {
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'An error occurred');
+      try {
+        const error = await res.json();
+        throw new Error(error?.error || error?.message || res.statusText || 'An error occurred');
+      } catch (e) {
+        // Response had no JSON body
+        throw new Error(res.statusText || 'An error occurred');
+      }
     }
-    return res.json();
+    try {
+      return await res.json();
+    } catch (e) {
+      // No JSON body, return null-ish shape
+      return null as any;
+    }
   });
 
 export function useApi<T>(
@@ -93,10 +103,18 @@ export async function apiCallStandalone<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'An error occurred');
+    try {
+      const error = await response.json();
+      throw new Error(error?.error || error?.message || response.statusText || 'An error occurred');
+    } catch (e) {
+      throw new Error(response.statusText || 'An error occurred');
+    }
   }
 
-  return response.json();
+  try {
+    return await response.json();
+  } catch (e) {
+    return null as any;
+  }
 }
 

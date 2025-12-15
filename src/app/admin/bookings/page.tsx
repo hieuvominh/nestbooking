@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
+import { formatCurrency } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -82,13 +83,16 @@ export default function BookingsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this booking?")) return;
+    if (!confirm("Bạn có chắc chắn muốn xóa đặt chỗ này không?")) return;
 
     try {
       await apiCall(`/api/bookings/${id}`, { method: "DELETE" });
       mutateBookings();
     } catch (error) {
       console.error("Error deleting booking:", error);
+      // Show a user-friendly message with the API error if available
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Không thể xóa đặt chỗ: ${message}`);
     }
   };
 
@@ -110,7 +114,7 @@ export default function BookingsPage() {
         }
       );
       navigator.clipboard.writeText(response.url);
-      alert("Public URL copied to clipboard!");
+      alert("Đã sao chép URL công khai vào clipboard!");
       mutateBookings();
     } catch (error) {
       console.error("Error generating public URL:", error);
@@ -136,6 +140,36 @@ export default function BookingsPage() {
     return new Date(dateString).toLocaleString();
   };
 
+  const translateStatus = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "đang chờ";
+      case "confirmed":
+        return "đã xác nhận";
+      case "checked-in":
+        return "đã check-in";
+      case "completed":
+        return "đã hoàn thành";
+      case "cancelled":
+        return "đã hủy";
+      default:
+        return status;
+    }
+  };
+
+  const translatePaymentStatus = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "chưa thanh toán";
+      case "paid":
+        return "đã thanh toán";
+      case "refunded":
+        return "đã hoàn tiền";
+      default:
+        return status;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -156,32 +190,32 @@ export default function BookingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Bookings Management</h1>
+        <h1 className="text-3xl font-bold">Quản lý đặt chỗ</h1>
         <Button onClick={() => router.push("/admin/bookings/create")}>
           <Plus className="h-4 w-4 mr-2" />
-          Create New Booking
+          Tạo đặt chỗ mới
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Bookings</CardTitle>
+          <CardTitle>Tất cả đặt chỗ</CardTitle>
           <CardDescription>
-            Manage customer bookings and check-ins
+            Quản lý đặt chỗ khách hàng và check-in
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Desk</TableHead>
-                <TableHead>Start Time</TableHead>
-                <TableHead>End Time</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Khách hàng</TableHead>
+                <TableHead>Bàn</TableHead>
+                <TableHead>Thời gian bắt đầu</TableHead>
+                <TableHead>Thời gian kết thúc</TableHead>
+                <TableHead>Trạng thái</TableHead>
                 <TableHead>Check-in</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>Thanh toán</TableHead>
+                <TableHead>Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -208,7 +242,7 @@ export default function BookingsPage() {
                         booking.status
                       )}`}
                     >
-                      {booking.status}
+                      {translateStatus(booking.status)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -224,7 +258,7 @@ export default function BookingsPage() {
                           handleCheckIn(booking._id);
                         }}
                       >
-                        Check In
+                        Check-in
                       </Button>
                     ) : (
                       <span className="text-sm text-gray-400">-</span>
@@ -232,9 +266,9 @@ export default function BookingsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      ${booking.totalAmount?.toFixed(2) || "0.00"}
+                      {formatCurrency(booking.totalAmount ?? 0)}
                       <div className="text-xs text-gray-500">
-                        {booking.paymentStatus}
+                        {translatePaymentStatus(booking.paymentStatus)}
                       </div>
                     </div>
                   </TableCell>
@@ -248,7 +282,7 @@ export default function BookingsPage() {
                           handleEdit(booking);
                         }}
                       >
-                        Edit
+                        Sửa
                       </Button>
                       {!booking.publicToken &&
                         booking.status === "confirmed" && (
@@ -260,7 +294,7 @@ export default function BookingsPage() {
                               generatePublicUrl(booking._id);
                             }}
                           >
-                            Generate URL
+                            Tạo URL
                           </Button>
                         )}
                       {booking.publicToken && (
@@ -272,10 +306,10 @@ export default function BookingsPage() {
                             navigator.clipboard.writeText(
                               `${window.location.origin}/p/${booking._id}`
                             );
-                            alert("Public URL copied to clipboard!");
+                            alert("Đã sao chép URL công khai vào clipboard!");
                           }}
                         >
-                          Copy URL
+                          Sao chép URL
                         </Button>
                       )}
                       <Button
@@ -287,19 +321,22 @@ export default function BookingsPage() {
                         }}
                         className="bg-green-50 text-green-600 hover:bg-green-100"
                       >
-                        Billing
+                        Thanh toán
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(booking._id);
-                        }}
-                        className="text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </Button>
+                      {booking.status !== "cancelled" &&
+                        booking.status !== "completed" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(booking._id);
+                            }}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            Xóa
+                          </Button>
+                        )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -309,7 +346,7 @@ export default function BookingsPage() {
 
           {(!bookings || bookings.length === 0) && (
             <div className="text-center py-8 text-gray-500">
-              No bookings found. Create your first booking to get started.
+              Không tìm thấy đặt chỗ. Tạo đặt chỗ đầu tiên để bắt đầu.
             </div>
           )}
         </CardContent>

@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/currency";
 import {
   Card,
   CardContent,
@@ -562,7 +563,7 @@ export default function CreateBookingPage() {
                       {selectedDesk.description}
                     </p>
                     <p className="text-sm font-semibold mt-1">
-                      ${selectedDesk.hourlyRate}/giờ
+                      {formatCurrency(selectedDesk.hourlyRate)}/giờ
                     </p>
                   </div>
                 )}
@@ -594,7 +595,7 @@ export default function CreateBookingPage() {
                           <p className="text-sm">
                             <DollarSign className="inline h-4 w-4 mr-1" />
                             <span className="font-semibold text-green-600">
-                              ${selectedCombo.price.toFixed(2)}
+                              {formatCurrency(selectedCombo.price)}
                             </span>
                           </p>
                         </div>
@@ -846,7 +847,7 @@ export default function CreateBookingPage() {
 
                         <div className="flex justify-between items-center pt-2 border-t">
                           <span className="text-xl font-bold text-green-600">
-                            ${combo.price.toFixed(2)}
+                            {formatCurrency(combo.price)}
                           </span>
                           {selectedCombo?._id === combo._id ? (
                             <Button
@@ -901,7 +902,7 @@ export default function CreateBookingPage() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-lg font-bold text-green-600">
-                            ${item.price.toFixed(2)}
+                            {formatCurrency(item.price)}
                           </span>
                           <Button
                             type="button"
@@ -1010,7 +1011,7 @@ export default function CreateBookingPage() {
                             </Button>
                           </div>
                           <span className="font-bold">
-                            ${(item.price * item.quantity).toFixed(2)}
+                            {formatCurrency(item.price * item.quantity)}
                           </span>
                         </div>
                       </div>
@@ -1033,12 +1034,14 @@ export default function CreateBookingPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Thuê Bàn</span>
-                    <span className="font-medium">${deskCost.toFixed(2)}</span>
+                    <span className="font-medium">
+                      {formatCurrency(deskCost)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Món ({cart.length})</span>
                     <span className="font-medium">
-                      ${inventoryTotal.toFixed(2)}
+                      {formatCurrency(inventoryTotal)}
                     </span>
                   </div>
 
@@ -1047,7 +1050,7 @@ export default function CreateBookingPage() {
                   <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
                     <span className="text-lg font-semibold">Tổng Cộng</span>
                     <span className="text-2xl font-bold">
-                      ${grandTotal.toFixed(2)}
+                      {formatCurrency(grandTotal)}
                     </span>
                   </div>
                 </div>
@@ -1097,7 +1100,7 @@ export default function CreateBookingPage() {
                 >
                   {isSubmitting
                     ? "Đang tạo đặt bàn..."
-                    : `Tạo Đặt Bàn - $${grandTotal.toFixed(2)}`}
+                    : `Tạo Đặt Bàn - ${formatCurrency(grandTotal)}`}
                 </Button>
 
                 {/* Info */}

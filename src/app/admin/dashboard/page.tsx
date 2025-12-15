@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RefreshIndicator } from "@/components/ui/refresh-indicator";
+import { formatCurrency } from "@/lib/currency";
 
 interface DashboardStats {
   totalDesks: number;
@@ -63,7 +64,7 @@ export default function DashboardPage() {
   if (desksLoading || bookingsLoading || inventoryLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading dashboard...</div>
+        <div className="text-lg">Đang tải bảng điều khiển...</div>
       </div>
     );
   }
@@ -72,26 +73,28 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Bảng điều khiển</h1>
           <RefreshIndicator
             isLoading={desksLoading || bookingsLoading || inventoryLoading}
             refreshInterval={10000}
           />
         </div>
-        <p className="text-gray-600">Welcome to BookingCoo admin panel</p>
+        <p className="text-gray-600">
+          Chào mừng đến với bảng quản trị BookingCoo
+        </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Desks</CardTitle>
+            <CardTitle className="text-sm font-medium">Tổng số bàn</CardTitle>
             <div className="h-4 w-4 text-muted-foreground">🪑</div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalDesks}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.availableDesks} available
+              {stats.availableDesks} còn trống
             </p>
           </CardContent>
         </Card>
@@ -99,14 +102,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Today's Bookings
+              Đặt chỗ hôm nay
             </CardTitle>
             <div className="h-4 w-4 text-muted-foreground">📅</div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.todayBookings}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.activeBookings} currently active
+              {stats.activeBookings} đang hoạt động
             </p>
           </CardContent>
         </Card>
@@ -114,35 +117,35 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Today's Revenue
+              Doanh thu hôm nay
             </CardTitle>
             <div className="h-4 w-4 text-muted-foreground">💰</div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${stats.todayRevenue.toFixed(2)}
+              {formatCurrency(stats.todayRevenue)}
             </div>
-            <p className="text-xs text-muted-foreground">From desk bookings</p>
+            <p className="text-xs text-muted-foreground">Từ các đặt chỗ bàn</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Low Stock Items
+              Mặt hàng sắp hết
             </CardTitle>
             <div className="h-4 w-4 text-muted-foreground">⚠️</div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.lowStockItems}</div>
-            <p className="text-xs text-muted-foreground">Need restocking</p>
+            <p className="text-xs text-muted-foreground">Cần bổ sung hàng</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Desk Utilization
+              Tỷ lệ sử dụng bàn
             </CardTitle>
             <div className="h-4 w-4 text-muted-foreground">📊</div>
           </CardHeader>
@@ -157,19 +160,19 @@ export default function DashboardPage() {
                 : 0}
               %
             </div>
-            <p className="text-xs text-muted-foreground">Currently occupied</p>
+            <p className="text-xs text-muted-foreground">Đang được sử dụng</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
+            <CardTitle className="text-sm font-medium">Trạng thái</CardTitle>
             <div className="h-4 w-4 text-muted-foreground">✅</div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Online</div>
+            <div className="text-2xl font-bold text-green-600">Trực tuyến</div>
             <p className="text-xs text-muted-foreground">
-              All systems operational
+              Tất cả hệ thống hoạt động bình thường
             </p>
           </CardContent>
         </Card>
@@ -179,8 +182,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Recent Bookings</CardTitle>
-            <CardDescription>Latest booking activity</CardDescription>
+            <CardTitle>Đặt chỗ gần đây</CardTitle>
+            <CardDescription>Hoạt động đặt chỗ mới nhất</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -192,12 +195,14 @@ export default function DashboardPage() {
                   <div>
                     <p className="font-medium">{booking.customer.name}</p>
                     <p className="text-sm text-gray-600">
-                      Desk {booking.deskId?.label} •{" "}
+                      Bàn {booking.deskId?.label} •{" "}
                       {new Date(booking.startTime).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium">${booking.totalAmount}</p>
+                    <p className="font-medium">
+                      {formatCurrency(booking.totalAmount)}
+                    </p>
                     <p
                       className={`text-sm px-2 py-1 rounded-full ${
                         booking.status === "confirmed"
@@ -209,7 +214,13 @@ export default function DashboardPage() {
                           : "bg-yellow-100 text-yellow-800"
                       }`}
                     >
-                      {booking.status}
+                      {booking.status === "confirmed"
+                        ? "đã xác nhận"
+                        : booking.status === "checked-in"
+                        ? "đã check-in"
+                        : booking.status === "completed"
+                        ? "đã hoàn thành"
+                        : "đang xử lý"}
                     </p>
                   </div>
                 </div>
@@ -220,8 +231,8 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Low Stock Alerts</CardTitle>
-            <CardDescription>Items that need restocking</CardDescription>
+            <CardTitle>Cảnh báo hàng sắp hết</CardTitle>
+            <CardDescription>Các mặt hàng cần bổ sung</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -243,7 +254,9 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 </div>
-              )) || <p className="text-gray-500">All items well stocked</p>}
+              )) || (
+                <p className="text-gray-500">Tất cả mặt hàng đều đủ tồn kho</p>
+              )}
             </div>
           </CardContent>
         </Card>

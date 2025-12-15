@@ -43,6 +43,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PrintBill } from "@/components/PrintBill";
+import { formatCurrency } from "@/lib/currency";
 
 interface Booking {
   _id: string;
@@ -593,7 +594,7 @@ export default function BookingDetailPage() {
                     Tổng Cộng
                   </Label>
                   <p className="text-lg font-bold">
-                    ${booking.totalAmount?.toFixed(2) || "0.00"}
+                    {formatCurrency(booking.totalAmount ?? 0)}
                   </p>
                 </div>
                 <div>
@@ -752,8 +753,8 @@ export default function BookingDetailPage() {
                             <SelectContent>
                               {inventory?.map((item) => (
                                 <SelectItem key={item._id} value={item._id}>
-                                  {item.name} - ${item.price.toFixed(2)} (Tồn
-                                  kho: {item.quantity}){" "}
+                                  {item.name} - {formatCurrency(item.price)}{" "}
+                                  (Tồn kho: {item.quantity}){" "}
                                   {!item.isActive && " (Ngừng hoạt động)"}
                                 </SelectItem>
                               ))}
@@ -803,7 +804,7 @@ export default function BookingDetailPage() {
                                       {cartItem.name}
                                     </div>
                                     <div className="text-sm text-gray-500">
-                                      ${cartItem.price.toFixed(2)} mỗi
+                                      {formatCurrency(cartItem.price)} mỗi
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -820,10 +821,9 @@ export default function BookingDetailPage() {
                                       className="w-20"
                                     />
                                     <div className="text-sm font-medium w-16 text-right">
-                                      $
-                                      {(
+                                      {formatCurrency(
                                         cartItem.price * cartItem.quantity
-                                      ).toFixed(2)}
+                                      )}
                                     </div>
                                     <Button
                                       variant="ghost"
@@ -841,7 +841,7 @@ export default function BookingDetailPage() {
                             <div className="mt-3 pt-3 border-t">
                               <div className="flex justify-between items-center font-semibold">
                                 <span>Tổng:</span>
-                                <span>${getCartTotal().toFixed(2)}</span>
+                                <span>{formatCurrency(getCartTotal())}</span>
                               </div>
                             </div>
                           </div>
@@ -923,7 +923,7 @@ export default function BookingDetailPage() {
                               {item.name} × {item.quantity}
                             </span>
                             <span>
-                              ${(item.price * item.quantity).toFixed(2)}
+                              {formatCurrency(item.price * item.quantity)}
                             </span>
                           </div>
                         ))}
@@ -931,7 +931,7 @@ export default function BookingDetailPage() {
                       <Separator className="my-2" />
                       <div className="flex justify-between font-semibold">
                         <span>Tổng</span>
-                        <span>${order.total.toFixed(2)}</span>
+                        <span>{formatCurrency(order.total)}</span>
                       </div>
                     </div>
                   ))}

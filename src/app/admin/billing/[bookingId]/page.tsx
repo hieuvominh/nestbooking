@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PrintBill } from "@/components/PrintBill";
+import { formatCurrency } from "@/lib/currency";
 
 // TypeScript Interfaces
 interface Booking {
@@ -297,11 +298,10 @@ export default function BillingPage() {
     if (!booking) return;
 
     const confirmed = confirm(
-      `Complete check-out for ${
-        booking.customer.name
-      }?\n\nFinal Total: $${finalTotal.toFixed(2)}\nPayment Status: ${
-        booking.paymentStatus
-      }`
+      `Complete check-out for ${booking.customer.name}?
+
+Final Total: ${formatCurrency(finalTotal)}
+Payment Status: ${booking.paymentStatus}`
     );
     if (!confirmed) return;
 
@@ -594,7 +594,7 @@ export default function BillingPage() {
                   <div>
                     <Label className="text-sm text-gray-500">Hourly Rate</Label>
                     <p className="font-medium">
-                      ${booking.deskId.hourlyRate.toFixed(2)}/hr
+                      {formatCurrency(booking.deskId.hourlyRate)}/hr
                     </p>
                   </div>
                   <div>
@@ -630,12 +630,12 @@ export default function BillingPage() {
                 <div>
                   <p className="text-sm text-gray-600">Desk Rental</p>
                   <p className="text-xs text-gray-500">
-                    {bookingDuration.toFixed(2)} hrs × $
-                    {booking.deskId.hourlyRate.toFixed(2)}/hr
+                    {bookingDuration.toFixed(2)} hrs ×{" "}
+                    {formatCurrency(booking.deskId.hourlyRate)}/hr
                   </p>
                 </div>
                 <p className="text-xl font-bold text-blue-600">
-                  ${deskCost.toFixed(2)}
+                  {formatCurrency(deskCost)}
                 </p>
               </div>
             </CardContent>
@@ -722,7 +722,7 @@ export default function BillingPage() {
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-sm font-bold text-green-600">
-                              ${item.price.toFixed(2)}
+                              {formatCurrency(item.price)}
                             </span>
                             <Button
                               type="button"
@@ -755,7 +755,7 @@ export default function BillingPage() {
                                   {item.name}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  ${item.price.toFixed(2)} each
+                                  {formatCurrency(item.price)} each
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
@@ -806,7 +806,7 @@ export default function BillingPage() {
                           <div className="flex justify-between items-center pt-2 border-t">
                             <span className="font-semibold">Cart Total:</span>
                             <span className="text-lg font-bold text-green-600">
-                              ${cartTotal.toFixed(2)}
+                              {formatCurrency(cartTotal)}
                             </span>
                           </div>
 
@@ -817,9 +817,9 @@ export default function BillingPage() {
                           >
                             {isAddingOrder
                               ? "Adding Items..."
-                              : `Add ${
-                                  cart.length
-                                } Item(s) - $${cartTotal.toFixed(2)}`}
+                              : `Add ${cart.length} Item(s) - ${formatCurrency(
+                                  cartTotal
+                                )}`}
                           </Button>
                         </div>
                       </>
@@ -861,11 +861,11 @@ export default function BillingPage() {
                             <div className="flex-1">
                               <p className="font-medium">{item.name}</p>
                               <p className="text-gray-500">
-                                {item.quantity} × ${item.price.toFixed(2)}
+                                {item.quantity} × {formatCurrency(item.price)}
                               </p>
                             </div>
                             <p className="font-semibold">
-                              ${item.subtotal.toFixed(2)}
+                              {formatCurrency(item.subtotal)}
                             </p>
                           </div>
                         ))}
@@ -886,7 +886,7 @@ export default function BillingPage() {
                       <div className="flex justify-between items-center font-semibold">
                         <span>Order Total</span>
                         <span className="text-lg">
-                          ${order.total.toFixed(2)}
+                          {formatCurrency(order.total)}
                         </span>
                       </div>
                     </div>
@@ -1002,26 +1002,30 @@ export default function BillingPage() {
                       ? "Combo Package"
                       : "Desk Rental"}
                   </span>
-                  <span className="font-medium">${deskCost.toFixed(2)}</span>
+                  <span className="font-medium">
+                    {formatCurrency(deskCost)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">
                     Orders {orders.length > 0 && `(${orders.length})`}
                   </span>
-                  <span className="font-medium">${ordersTotal.toFixed(2)}</span>
+                  <span className="font-medium">
+                    {formatCurrency(ordersTotal)}
+                  </span>
                 </div>
 
                 <Separator />
 
                 <div className="flex justify-between font-medium">
                   <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>{formatCurrency(subtotal)}</span>
                 </div>
 
                 {calculatedDiscount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Discount</span>
-                    <span>-${calculatedDiscount.toFixed(2)}</span>
+                    <span>-{formatCurrency(calculatedDiscount)}</span>
                   </div>
                 )}
 
@@ -1031,7 +1035,7 @@ export default function BillingPage() {
                 <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
                   <span className="text-lg font-semibold">Total</span>
                   <span className="text-2xl font-bold">
-                    ${finalTotal.toFixed(2)}
+                    {formatCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
@@ -1050,7 +1054,9 @@ export default function BillingPage() {
                     {isProcessingPayment
                       ? "Processing..."
                       : booking.paymentStatus === "pending"
-                      ? `Pay & Complete Check-Out ($${finalTotal.toFixed(2)})`
+                      ? `Pay & Complete Check-Out (${formatCurrency(
+                          finalTotal
+                        )})`
                       : "Complete Check-Out"}
                   </Button>
                 )}

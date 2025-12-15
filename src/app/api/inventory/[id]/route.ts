@@ -74,3 +74,27 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
 }
 
 export const PATCH = requireRole(['admin', 'staff'])(updateInventoryItem);
+
+// DELETE /api/inventory/[id] - Delete an inventory item
+async function deleteInventoryItem(request: AuthenticatedRequest, { params }: InventoryParams) {
+  try {
+    await connectDB();
+    const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return ApiResponses.badRequest('Invalid inventory item ID');
+    }
+
+    const deleted = await InventoryItem.findByIdAndDelete(id);
+    if (!deleted) {
+      return ApiResponses.notFound('Inventory item not found');
+    }
+
+    return ApiResponses.success(null, 'Inventory item deleted successfully');
+  } catch (error) {
+    console.error('Delete inventory item error:', error);
+    return ApiResponses.serverError();
+  }
+}
+
+export const DELETE = requireRole(['admin'])(deleteInventoryItem);

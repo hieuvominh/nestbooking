@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 /**
  * PrintBill Component
@@ -143,10 +144,7 @@ export function PrintBill({
     });
   };
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
-  };
+  // currency formatting uses VNĐ via util
 
   // Pad text for alignment (simple left/right padding)
   const padLine = (left: string, right: string, totalWidth: number = 32) => {
@@ -284,7 +282,9 @@ export function PrintBill({
                   }}
                 >
                   {padLine(
-                    `Thuê Bàn (${duration}h x $${deskHourlyRate}/h)`,
+                    `Thuê Bàn (${duration}h x ${formatCurrency(
+                      deskHourlyRate
+                    )}/h)`,
                     formatCurrency(deskCost)
                   )}
                 </div>

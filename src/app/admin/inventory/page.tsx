@@ -20,6 +20,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+import { formatCurrency } from "@/lib/currency";
+
 interface InventoryItem {
   _id: string;
   name: string;
@@ -341,7 +343,7 @@ export default function InventoryPage() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <label htmlFor="price" className="text-sm font-medium">
-                        Price ($)
+                        Price (VNĐ)
                       </label>
                       <Input
                         id="price"
@@ -470,7 +472,7 @@ export default function InventoryPage() {
                       <TableCell className="capitalize">
                         {item.category}
                       </TableCell>
-                      <TableCell>${item.price.toFixed(2)}</TableCell>
+                      <TableCell>{formatCurrency(item.price)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <span
@@ -591,7 +593,7 @@ export default function InventoryPage() {
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell>${order.total.toFixed(2)}</TableCell>
+                    <TableCell>{formatCurrency(order.total)}</TableCell>
                     <TableCell>
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(

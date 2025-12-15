@@ -49,7 +49,7 @@ export default function AdminLayout({
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+        <div className="text-lg">Đang tải...</div>
       </div>
     );
   }
@@ -63,15 +63,19 @@ export default function AdminLayout({
   }
 
   const navigation = [
-    { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-    { name: "Bookings", href: "/admin/bookings", icon: Calendar },
-    { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
-    { name: "Transactions", href: "/admin/transactions", icon: CreditCard },
+    {
+      name: "Bảng điều khiển",
+      href: "/admin/dashboard",
+      icon: LayoutDashboard,
+    },
+    { name: "Đặt chỗ", href: "/admin/bookings", icon: Calendar },
+    { name: "Đơn hàng", href: "/admin/orders", icon: ShoppingCart },
+    { name: "Giao dịch", href: "/admin/transactions", icon: CreditCard },
   ];
 
   const settingsNavigation = [
-    { name: "Desks", href: "/admin/settings/desks", icon: Monitor },
-    { name: "Inventory", href: "/admin/settings/inventory", icon: Package },
+    { name: "Bàn", href: "/admin/settings/desks", icon: Monitor },
+    { name: "Kho hàng", href: "/admin/settings/inventory", icon: Package },
   ];
 
   return (
@@ -118,7 +122,7 @@ export default function AdminLayout({
             <div className="pt-6">
               <div className="pb-2">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3">
-                  Settings
+                  Cài đặt
                 </span>
               </div>
               <button
@@ -137,7 +141,7 @@ export default function AdminLayout({
                         : "text-slate-500 group-hover:text-slate-700"
                     }`}
                   />
-                  <span>Settings</span>
+                  <span>Cài đặt</span>
                 </div>
                 {settingsExpanded ? (
                   <ChevronDown
