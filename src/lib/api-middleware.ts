@@ -75,6 +75,12 @@ export const ApiResponses = {
   conflict: (message: string) => 
     NextResponse.json({ error: message }, { status: 409 }),
   
-  serverError: (message: string = 'Internal server error') => 
-    NextResponse.json({ error: message }, { status: 500 }),
+  serverError: (message: string = 'Internal server error', error?: any) => {
+    const payload: any = { error: message };
+    // Include details in non-production to aid debugging
+    if (process.env.NODE_ENV !== 'production' && error) {
+      payload.details = error?.stack || String(error);
+    }
+    return NextResponse.json(payload, { status: 500 });
+  },
 };

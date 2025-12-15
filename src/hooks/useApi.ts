@@ -20,8 +20,13 @@ const fetcher = (url: string, token?: string) =>
         const error = await res.json();
         throw new Error(error?.error || error?.message || res.statusText || 'An error occurred');
       } catch (e) {
-        // Response had no JSON body
-        throw new Error(res.statusText || 'An error occurred');
+        // Response had no JSON body — try to get text for debugging
+        try {
+          const text = await res.text();
+          throw new Error(text || res.statusText || 'An error occurred');
+        } catch (e2) {
+          throw new Error(res.statusText || 'An error occurred');
+        }
       }
     }
     try {
@@ -107,7 +112,13 @@ export async function apiCallStandalone<T>(
       const error = await response.json();
       throw new Error(error?.error || error?.message || response.statusText || 'An error occurred');
     } catch (e) {
-      throw new Error(response.statusText || 'An error occurred');
+      // Response had no JSON body — include raw text for debugging
+      try {
+        const text = await response.text();
+        throw new Error(text || response.statusText || 'An error occurred');
+      } catch (e2) {
+        throw new Error(response.statusText || 'An error occurred');
+      }
     }
   }
 

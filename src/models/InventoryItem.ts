@@ -14,7 +14,7 @@ export interface IInventoryItem extends Document {
   isActive: boolean;
   type?: 'combo' | 'item';
   duration?: number;
-  includedItems?: string[];
+  includedItems?: { item: string; quantity: number }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -83,7 +83,12 @@ const InventoryItemSchema = new Schema<IInventoryItem>(
       min: 0,
     },
     includedItems: {
-      type: [String],
+      type: [
+        {
+          item: { type: Schema.Types.ObjectId, ref: 'InventoryItem', required: true },
+          quantity: { type: Number, required: true, min: 1 },
+        },
+      ],
       default: [],
     },
   },
@@ -103,4 +108,14 @@ InventoryItemSchema.virtual('isLowStock').get(function () {
   return this.quantity <= this.lowStockThreshold;
 });
 
-export default mongoose.models.InventoryItem || mongoose.model<IInventoryItem>('InventoryItem', InventoryItemSchema);
+const MODEL_NAME = 'InventoryItem';
+// If model already compiled with old schema (hot-reload), delete it so we register fresh schema
+if (mongoose.models[MODEL_NAME]) {
+  try {
+    delete mongoose.models[MODEL_NAME];
+  } catch (e) {
+    // ignore
+  }
+}
+
+export default mongoose.models[MODEL_NAME] || mongoose.model<IInventoryItem>(MODEL_NAME, InventoryItemSchema);

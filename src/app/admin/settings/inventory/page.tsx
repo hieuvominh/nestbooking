@@ -27,7 +27,11 @@ interface InventoryItem {
   description: string;
   price: number;
   stock: number;
-  category: "food" | "drinks" | "snacks" | "supplies";
+  sku?: string;
+  unit?: string;
+  lowStockThreshold?: number;
+  includedItems?: { item: string; quantity: number }[];
+  category: "food" | "drinks" | "snacks" | "supplies" | "combo";
   isAvailable: boolean;
   image?: string;
 }
@@ -89,7 +93,11 @@ export default function InventoryPage() {
     description: string;
     price: number;
     stock: number;
-    category: "food" | "drinks" | "snacks" | "supplies";
+    sku: string;
+    unit: string;
+    lowStockThreshold: number;
+    includedItems?: { item: string; quantity: number }[];
+    category: "food" | "drinks" | "snacks" | "supplies" | "combo";
     isAvailable: boolean;
     image: string;
   }>({
@@ -97,10 +105,21 @@ export default function InventoryPage() {
     description: "",
     price: 0,
     stock: 0,
+    sku: "",
+    unit: "pcs",
+    lowStockThreshold: 5,
+    includedItems: [],
     category: "food",
     isAvailable: true,
     image: "",
   });
+
+  const generateSKU = (name: string) => {
+    const clean = (name || "ITEM").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const prefix = clean.slice(0, 3).padEnd(3, "X");
+    const suffix = `${Date.now()}`.slice(-4);
+    return `${prefix}${suffix}`;
+  };
 
   const { data: inventory, mutate: mutateInventory } = useApi<InventoryItem[]>(
     "/api/inventory",
@@ -119,15 +138,35 @@ export default function InventoryPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const body: any = {
+        sku: formData.sku,
+        name: formData.name,
+        description: formData.description,
+        category:
+          formData.category === "drinks"
+            ? "beverage"
+            : formData.category === "snacks"
+            ? "merchandise"
+            : formData.category,
+        price: formData.price,
+        quantity: formData.stock,
+        lowStockThreshold: formData.lowStockThreshold,
+        unit: formData.unit,
+        imageUrl: formData.image,
+      };
+      if (formData.category === "combo") {
+        body.includedItems = formData.includedItems || [];
+      }
+
       if (editingItem) {
         await apiCall(`/api/inventory/${editingItem._id}`, {
-          method: "PUT",
-          body: formData,
+          method: "PATCH",
+          body,
         });
       } else {
         await apiCall("/api/inventory", {
           method: "POST",
-          body: formData,
+          body,
         });
       }
       mutateInventory();
@@ -151,8 +190,8 @@ export default function InventoryPage() {
   const handleStockUpdate = async (id: string, newStock: number) => {
     try {
       await apiCall(`/api/inventory/${id}`, {
-        method: "PUT",
-        body: { stock: newStock },
+        method: "PATCH",
+        body: { stockAdjustment: newStock, adjustmentType: "set" },
       });
       mutateInventory();
     } catch (error) {
@@ -181,6 +220,10 @@ export default function InventoryPage() {
       description: "",
       price: 0,
       stock: 0,
+      sku: "",
+      unit: "pcs",
+      lowStockThreshold: 5,
+      includedItems: [],
       category: "food",
       isAvailable: true,
       image: "",
@@ -194,8 +237,12 @@ export default function InventoryPage() {
       name: item.name,
       description: item.description,
       price: item.price,
-      stock: item.stock,
-      category: item.category,
+      stock: (item as any).quantity ?? item.stock,
+      sku: item.sku || "",
+      unit: item.unit || "pcs",
+      lowStockThreshold: item.lowStockThreshold || 5,
+      includedItems: item.includedItems || [],
+      category: (item.category as any) || "food",
       isAvailable: item.isAvailable,
       image: item.image || "",
     });
@@ -328,6 +375,9 @@ export default function InventoryPage() {
                           setFormData((prev) => ({
                             ...prev,
                             name: e.target.value,
+                            ...(editingItem
+                              ? {}
+                              : { sku: generateSKU(e.target.value) }),
                           }))
                         }
                         required
@@ -352,7 +402,26 @@ export default function InventoryPage() {
                         <option value="drinks">Đồ uống</option>
                         <option value="snacks">Đồ ăn vặt</option>
                         <option value="supplies">Vật tư</option>
+                        <option value="combo">Combo</option>
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="space-y-2">
+                      <label htmlFor="unit" className="text-sm font-medium">
+                        Đơn vị
+                      </label>
+                      <Input
+                        id="unit"
+                        value={formData.unit}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            unit: e.target.value,
+                          }))
+                        }
+                      />
                     </div>
                   </div>
 
@@ -375,6 +444,89 @@ export default function InventoryPage() {
                       required
                     />
                   </div>
+
+                  {formData.category === "combo" && (
+                    <div className="mt-4 border p-3 rounded">
+                      <h4 className="font-medium mb-2">Combo components</h4>
+                      {(formData.includedItems || []).map((comp, idx) => (
+                        <div key={idx} className="flex gap-2 items-center mb-2">
+                          <select
+                            value={comp.item}
+                            onChange={(e) => {
+                              const list = formData.includedItems || [];
+                              list[idx] = {
+                                ...list[idx],
+                                item: e.target.value,
+                              };
+                              setFormData((prev) => ({
+                                ...prev,
+                                includedItems: list,
+                              }));
+                            }}
+                            className="flex-1 p-2 border rounded"
+                          >
+                            <option value="">-- select item --</option>
+                            {inventory
+                              ?.filter(
+                                (it: any) => (it as any).type !== "combo"
+                              )
+                              .map((it: any) => (
+                                <option key={it._id} value={it._id}>
+                                  {it.name}
+                                </option>
+                              ))}
+                          </select>
+                          <input
+                            type="number"
+                            min={1}
+                            value={comp.quantity}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 1;
+                              const list = formData.includedItems || [];
+                              list[idx] = { ...list[idx], quantity: val };
+                              setFormData((prev) => ({
+                                ...prev,
+                                includedItems: list,
+                              }));
+                            }}
+                            className="w-24 p-2 border rounded"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const list = formData.includedItems || [];
+                              list.splice(idx, 1);
+                              setFormData((prev) => ({
+                                ...prev,
+                                includedItems: list,
+                              }));
+                            }}
+                            className="px-2 py-1 text-sm text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              includedItems: [
+                                ...(prev.includedItems || []),
+                                { item: "", quantity: 1 },
+                              ],
+                            }))
+                          }
+                          className="px-3 py-1 bg-blue-500 text-white rounded"
+                        >
+                          Add component
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
@@ -493,88 +645,91 @@ export default function InventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {inventory?.map((item) => (
-                    <TableRow key={item._id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {item.description}
+                  {inventory?.map((item) => {
+                    const itemStock = (item as any).quantity ?? item.stock;
+                    return (
+                      <TableRow key={item._id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {item.description}
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="capitalize">
-                        {translateCategory(item.category)}
-                      </TableCell>
-                      <TableCell>{formatCurrency(item.price)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                        </TableCell>
+                        <TableCell className="capitalize">
+                          {translateCategory(item.category)}
+                        </TableCell>
+                        <TableCell>{formatCurrency(item.price)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(
+                                itemStock
+                              )}`}
+                            >
+                              {itemStock}
+                            </span>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleStockUpdate(item._id, itemStock + 1)
+                                }
+                                className="h-6 w-6 p-0"
+                              >
+                                +
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleStockUpdate(
+                                    item._id,
+                                    Math.max(0, itemStock - 1)
+                                  )
+                                }
+                                className="h-6 w-6 p-0"
+                              >
+                                -
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(
-                              item.stock
-                            )}`}
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              item.isAvailable
+                                ? "text-green-600 bg-green-100"
+                                : "text-red-600 bg-red-100"
+                            }`}
                           >
-                            {item.stock}
+                            {translateAvailability(item.isAvailable)}
                           </span>
-                          <div className="flex gap-1">
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() =>
-                                handleStockUpdate(item._id, item.stock + 1)
-                              }
-                              className="h-6 w-6 p-0"
+                              onClick={() => startEdit(item)}
                             >
-                              +
+                              Sửa
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() =>
-                                handleStockUpdate(
-                                  item._id,
-                                  Math.max(0, item.stock - 1)
-                                )
-                              }
-                              className="h-6 w-6 p-0"
+                              onClick={() => handleDelete(item._id)}
+                              className="text-red-600 hover:bg-red-50"
                             >
-                              -
+                              Xóa
                             </Button>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            item.isAvailable
-                              ? "text-green-600 bg-green-100"
-                              : "text-red-600 bg-red-100"
-                          }`}
-                        >
-                          {translateAvailability(item.isAvailable)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startEdit(item)}
-                          >
-                            Sửa
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(item._id)}
-                            className="text-red-600 hover:bg-red-50"
-                          >
-                            Xóa
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
 

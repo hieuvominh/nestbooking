@@ -31,6 +31,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
       stockAdjustment,
       adjustmentType
     } = body;
+    const { includedItems } = body;
 
     const item = await InventoryItem.findById(id);
     if (!item) {
@@ -57,6 +58,30 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
     if (unit) item.unit = unit;
     if (imageUrl !== undefined) item.imageUrl = imageUrl;
     if (isActive !== undefined) item.isActive = isActive;
+    if (category) {
+      item.type = category === 'combo' ? 'combo' : 'item';
+    }
+    if (includedItems !== undefined) {
+      // only accept includedItems for combo
+      if (item.type === 'combo' || category === 'combo') {
+        // validate ids and ensure none of the components are combo items
+        const mongoose = (await import('mongoose')).default;
+        const ids = Array.isArray(includedItems) ? includedItems.map((it: any) => it.item).filter(Boolean) : [];
+        for (const id of ids) {
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            return ApiResponses.badRequest('Invalid included item id: ' + id);
+          }
+        }
+        const components = await InventoryItem.find({ _id: { $in: ids } }).lean();
+        const comboFound = components.find((c: any) => c.type === 'combo' || c.category === 'combo');
+        if (comboFound) {
+          return ApiResponses.badRequest('Included items cannot be combo items');
+        }
+        item.includedItems = Array.isArray(includedItems)
+          ? includedItems.map((it: any) => ({ item: it.item, quantity: it.quantity || 1 }))
+          : [];
+      }
+    }
 
     await item.save();
 
@@ -69,7 +94,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
 
   } catch (error) {
     console.error('Update inventory item error:', error);
-    return ApiResponses.serverError();
+    return ApiResponses.serverError(error instanceof Error ? error.message : 'Internal server error', error);
   }
 }
 
@@ -93,7 +118,7 @@ async function deleteInventoryItem(request: AuthenticatedRequest, { params }: In
     return ApiResponses.success(null, 'Inventory item deleted successfully');
   } catch (error) {
     console.error('Delete inventory item error:', error);
-    return ApiResponses.serverError();
+    return ApiResponses.serverError(error instanceof Error ? error.message : 'Internal server error', error);
   }
 }
 

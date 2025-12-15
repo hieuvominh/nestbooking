@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { EditModal } from "./EditModal";
+import { useApi } from "@/hooks/useApi";
 import {
   Form,
   FormControl,
@@ -27,10 +28,24 @@ const inventorySchema = z.object({
   description: z.string().optional(),
   price: z.number().min(0, "Price must be positive"),
   quantity: z.number().min(0, "Quantity must be positive"),
-  category: z.enum(["food", "beverage", "office-supplies", "merchandise"]),
+  category: z.enum([
+    "food",
+    "beverage",
+    "office-supplies",
+    "merchandise",
+    "combo",
+  ]),
   unit: z.string().min(1, "Unit is required"),
   sku: z.string().min(1, "SKU is required"),
   lowStockThreshold: z.number().min(0, "Low stock threshold must be positive"),
+  includedItems: z
+    .array(
+      z.object({
+        item: z.string().min(1),
+        quantity: z.number().min(1),
+      })
+    )
+    .optional(),
 });
 
 type InventoryFormData = z.infer<typeof inventorySchema>;
@@ -41,10 +56,11 @@ interface InventoryItem {
   description: string;
   price: number;
   quantity: number;
-  category: "food" | "beverage" | "office-supplies" | "merchandise";
+  category: "food" | "beverage" | "office-supplies" | "merchandise" | "combo";
   unit: string;
   sku: string;
   lowStockThreshold: number;
+  includedItems?: { item: string; quantity: number }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +80,7 @@ export function InventoryEditModal({
   onSave,
   isLoading = false,
 }: InventoryEditModalProps) {
+  const { data: allItems } = useApi<InventoryItem[]>("/api/inventory");
   const form = useForm<InventoryFormData>({
     resolver: zodResolver(inventorySchema),
     defaultValues: {
@@ -89,6 +106,7 @@ export function InventoryEditModal({
         unit: item.unit,
         sku: item.sku,
         lowStockThreshold: item.lowStockThreshold,
+        includedItems: item.includedItems || [],
       });
     } else {
       form.reset({
@@ -100,6 +118,7 @@ export function InventoryEditModal({
         unit: "pcs",
         sku: "",
         lowStockThreshold: 5,
+        includedItems: [],
       });
     }
   }, [item, form]);
@@ -174,6 +193,7 @@ export function InventoryEditModal({
                       Office Supplies
                     </SelectItem>
                     <SelectItem value="merchandise">Merchandise</SelectItem>
+                    <SelectItem value="combo">Combo</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -282,6 +302,73 @@ export function InventoryEditModal({
             />
           </div>
         </div>
+        {/* Combo builder */}
+        {form.watch("category") === "combo" && (
+          <div className="mt-4">
+            <h4 className="font-medium mb-2">Combo components</h4>
+            <div className="space-y-2">
+              {(form.getValues().includedItems || []).map((comp, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <select
+                    value={comp.item}
+                    onChange={(e) => {
+                      const list = form.getValues().includedItems || [];
+                      list[idx] = { ...list[idx], item: e.target.value };
+                      form.setValue("includedItems", list);
+                    }}
+                    className="flex-1 p-2 border rounded"
+                  >
+                    <option value="">-- select item --</option>
+                    {allItems
+                      ?.filter((it) => (it as any).type !== "combo")
+                      .map((it) => (
+                        <option key={it._id} value={it._id}>
+                          {it.name}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    value={comp.quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      const list = form.getValues().includedItems || [];
+                      list[idx] = { ...list[idx], quantity: val };
+                      form.setValue("includedItems", list);
+                    }}
+                    className="w-24 p-2 border rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const list = form.getValues().includedItems || [];
+                      list.splice(idx, 1);
+                      form.setValue("includedItems", list);
+                    }}
+                    className="px-2 py-1 text-sm text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const list = form.getValues().includedItems || [];
+                    list.push({ item: "", quantity: 1 });
+                    form.setValue("includedItems", list);
+                  }}
+                  className="px-3 py-1 bg-blue-500 text-white rounded"
+                >
+                  Add component
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Form>
     </EditModal>
   );

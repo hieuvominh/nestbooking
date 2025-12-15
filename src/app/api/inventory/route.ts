@@ -39,7 +39,7 @@ async function getInventory(request: AuthenticatedRequest) {
     return ApiResponses.success(itemsWithStatus);
   } catch (error) {
     console.error('Get inventory error:', error);
-    return ApiResponses.serverError();
+    return ApiResponses.serverError(error instanceof Error ? error.message : 'Internal server error', error);
   }
 }
 
@@ -60,6 +60,7 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       unit,
       imageUrl
     } = body;
+    const { includedItems } = body;
 
     if (!sku || !name || !category || price === undefined) {
       return ApiResponses.badRequest('SKU, name, category, and price are required');
@@ -71,7 +72,30 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       return ApiResponses.conflict('SKU already exists');
     }
 
-    const item = new InventoryItem({
+    // validate includedItems for combo
+    let validatedIncludedItems: any[] = [];
+    if (category === 'combo' && Array.isArray(includedItems) && includedItems.length > 0) {
+      const mongoose = (await import('mongoose')).default;
+      // collect ids
+      const ids = includedItems.map((it: any) => it.item).filter(Boolean);
+      // check format
+      for (const id of ids) {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return ApiResponses.badRequest('Invalid included item id: ' + id);
+        }
+      }
+      // fetch items
+      const components = await InventoryItem.find({ _id: { $in: ids } }).lean();
+      // ensure none are combo type
+      const comboFound = components.find((c: any) => c.type === 'combo' || c.category === 'combo');
+      if (comboFound) {
+        return ApiResponses.badRequest('Included items cannot be combo items');
+      }
+      // map validated
+      validatedIncludedItems = includedItems.map((it: any) => ({ item: it.item, quantity: it.quantity || 1 }));
+    }
+
+    const itemData: any = {
       sku: sku.toUpperCase(),
       name,
       description,
@@ -80,15 +104,18 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       quantity: quantity || 0,
       lowStockThreshold: lowStockThreshold || 5,
       unit: unit || 'pcs',
-      imageUrl
-    });
+      imageUrl,
+      type: category === 'combo' ? 'combo' : 'item',
+      includedItems: validatedIncludedItems,
+    };
+    const item = new InventoryItem(itemData);
 
     await item.save();
 
     return ApiResponses.created(item, 'Inventory item created successfully');
   } catch (error) {
     console.error('Create inventory item error:', error);
-    return ApiResponses.serverError();
+    return ApiResponses.serverError(error instanceof Error ? error.message : 'Internal server error', error);
   }
 }
 
