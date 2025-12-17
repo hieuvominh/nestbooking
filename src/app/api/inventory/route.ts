@@ -9,7 +9,11 @@ async function getInventory(request: AuthenticatedRequest) {
     await connectDB();
 
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category');
+    let category = searchParams.get('category');
+    // normalize common client category values
+    if (category === 'supplies') category = 'office-supplies';
+    if (category === 'drinks') category = 'beverage';
+    if (category === 'snacks') category = 'merchandise';
     const lowStock = searchParams.get('lowStock') === 'true';
     const sortBy = searchParams.get('sortBy') || 'name';
     const order = searchParams.get('order') === 'desc' ? -1 : 1;
@@ -53,13 +57,15 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       sku,
       name,
       description,
-      category,
+      category: rawCategory,
       price,
       quantity,
       lowStockThreshold,
       unit,
       imageUrl
     } = body;
+    // normalize category values coming from clients
+    const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
     const { includedItems } = body;
 
     if (!sku || !name || !category || price === undefined) {

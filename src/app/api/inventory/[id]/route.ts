@@ -22,7 +22,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
     const {
       name,
       description,
-      category,
+      category: rawCategory,
       price,
       lowStockThreshold,
       unit,
@@ -32,6 +32,8 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
       adjustmentType
     } = body;
     const { includedItems } = body;
+    // normalize category values coming from clients
+    const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
 
     const item = await InventoryItem.findById(id);
     if (!item) {
