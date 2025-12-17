@@ -10,6 +10,23 @@ async function getBookings(request: AuthenticatedRequest) {
   try {
     await connectDB();
 
+    // Auto-complete bookings whose end time has passed.
+    // Any booking that ended in the past and is not already completed or cancelled
+    // will be marked as 'completed'. This keeps the booking statuses up-to-date
+    // without relying on a separate background worker.
+    try {
+      await Booking.updateMany(
+        {
+          endTime: { $lt: new Date() },
+          status: { $nin: ["cancelled", "completed"] },
+        },
+        { $set: { status: "completed" } }
+      );
+    } catch (err) {
+      // Non-fatal — if updating statuses fails we still want to return bookings
+      console.error("Failed to auto-complete bookings:", err);
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const deskId = searchParams.get('deskId');
@@ -115,11 +132,12 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('End time must be after start time');
     }
 
-    // Only validate past dates for future bookings (status = pending)
-    // Allow past dates for immediate check-ins (status = checked-in)
-    if (status !== 'checked-in' && start < new Date()) {
-      return ApiResponses.badRequest('Booking cannot be in the past');
-    }
+    // NOTE: removed strict server-side rejection of past bookings here
+    // The previous behavior returned a 400 when start < now for non-checked-in
+    // bookings. That validation has been removed to allow creating bookings
+    // with past start times from the client. If you still want to prevent
+    // past bookings in some cases, implement that check in the client or
+    // re-introduce conditional validation here.
 
     // Check if desk exists and is available
     const desk = await Desk.findById(deskId);

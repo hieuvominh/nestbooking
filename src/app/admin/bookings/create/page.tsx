@@ -454,7 +454,7 @@ export default function CreateBookingPage() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -488,7 +488,7 @@ export default function CreateBookingPage() {
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="customerEmail">Email</Label>
                     <Input
@@ -546,8 +546,8 @@ export default function CreateBookingPage() {
                         ?.filter((desk) => desk.status === "available")
                         .map((desk) => (
                           <SelectItem key={desk._id} value={desk._id}>
-                            {desk.label} - {desk.location} (${desk.hourlyRate}
-                            /giờ)
+                            {desk.label} - {desk.location} (
+                            {formatCurrency(desk.hourlyRate)}/giờ)
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -613,7 +613,7 @@ export default function CreateBookingPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="startTime">Giờ Bắt Đầu *</Label>
                     <Input
@@ -733,7 +733,7 @@ export default function CreateBookingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* View Mode Toggle */}
-                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+                <div className="flex flex-col sm:flex-row gap-2 p-1 bg-gray-100 rounded-lg">
                   <Button
                     type="button"
                     variant={viewMode === "combos" ? "default" : "ghost"}
@@ -771,7 +771,7 @@ export default function CreateBookingPage() {
                     value={categoryFilter}
                     onValueChange={setCategoryFilter}
                   >
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Danh mục" />
                     </SelectTrigger>
                     <SelectContent>
@@ -836,9 +836,55 @@ export default function CreateBookingPage() {
                                     Bao gồm:
                                   </span>
                                   <ul className="list-disc list-inside ml-2 mt-1">
-                                    {combo.includedItems.map((item, idx) => (
-                                      <li key={idx}>{item}</li>
-                                    ))}
+                                    {combo.includedItems.map(
+                                      (comp: any, idx: number) => {
+                                        if (!comp) return null;
+                                        // simple string entry
+                                        if (typeof comp === "string")
+                                          return <li key={idx}>{comp}</li>;
+
+                                        // object entry - try to resolve name
+                                        if (typeof comp === "object") {
+                                          // if the component is already populated with a name
+                                          if (comp.name) {
+                                            const qty = comp.quantity
+                                              ? ` x${comp.quantity}`
+                                              : "";
+                                            return (
+                                              <li key={idx}>
+                                                {comp.name}
+                                                {qty}
+                                              </li>
+                                            );
+                                          }
+
+                                          // try to resolve by id using loaded inventory
+                                          const compId =
+                                            typeof comp.item === "string"
+                                              ? comp.item
+                                              : comp.item?._id;
+                                          const found = inventory?.find(
+                                            (it: any) => it._id === compId
+                                          );
+                                          const label = found
+                                            ? found.name
+                                            : compId || JSON.stringify(comp);
+                                          const qty = comp.quantity
+                                            ? ` x${comp.quantity}`
+                                            : "";
+                                          return (
+                                            <li key={idx}>
+                                              {label}
+                                              {qty}
+                                            </li>
+                                          );
+                                        }
+
+                                        return (
+                                          <li key={idx}>{String(comp)}</li>
+                                        );
+                                      }
+                                    )}
                                   </ul>
                                 </div>
                               )}

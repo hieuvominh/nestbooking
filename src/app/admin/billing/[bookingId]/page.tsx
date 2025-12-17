@@ -257,10 +257,10 @@ export default function BillingPage() {
         },
       });
       mutateBooking();
-      toast.success("Payment marked as paid successfully!");
+      toast.success("Đã đánh dấu là đã thanh toán!");
     } catch (error) {
       console.error("Error updating payment status:", error);
-      toast.error("Failed to update payment status");
+      toast.error("Cập nhật trạng thái thanh toán thất bại");
     } finally {
       setIsProcessingPayment(false);
     }
@@ -269,7 +269,9 @@ export default function BillingPage() {
   const handleRefund = async () => {
     if (!booking) return;
 
-    const confirmed = confirm("Are you sure you want to refund this payment?");
+    const confirmed = confirm(
+      "Bạn có chắc muốn hoàn tiền cho giao dịch này không?"
+    );
     if (!confirmed) return;
 
     setIsProcessingPayment(true);
@@ -279,10 +281,10 @@ export default function BillingPage() {
         body: { paymentStatus: "refunded" },
       });
       mutateBooking();
-      toast.success("Payment refunded successfully!");
+      toast.success("Hoàn tiền thành công!");
     } catch (error) {
       console.error("Error refunding payment:", error);
-      toast.error("Failed to refund payment");
+      toast.error("Hoàn tiền thất bại");
     } finally {
       setIsProcessingPayment(false);
     }
@@ -298,10 +300,10 @@ export default function BillingPage() {
     if (!booking) return;
 
     const confirmed = confirm(
-      `Complete check-out for ${booking.customer.name}?
+      `Hoàn tất trả phòng cho ${booking.customer.name}?
 
-Final Total: ${formatCurrency(finalTotal)}
-Payment Status: ${booking.paymentStatus}`
+  Tổng cuối: ${formatCurrency(finalTotal)}
+  Trạng thái thanh toán: ${booking.paymentStatus}`
     );
     if (!confirmed) return;
 
@@ -331,15 +333,13 @@ Payment Status: ${booking.paymentStatus}`
       mutateBooking();
 
       if (booking.paymentStatus === "pending") {
-        toast.success(
-          "Payment completed and booking checked out successfully!"
-        );
+        toast.success("Thanh toán hoàn tất và trả phòng thành công!");
       } else {
-        toast.success("Booking checked out successfully!");
+        toast.success("Trả phòng thành công!");
       }
     } catch (error) {
       console.error("Error checking out:", error);
-      toast.error("Failed to check out booking");
+      toast.error("Trả phòng thất bại");
     } finally {
       setIsProcessingPayment(false);
     }
@@ -366,9 +366,9 @@ Payment Status: ${booking.paymentStatus}`
     if (discount) {
       setDiscountPercent(discount);
       setDiscountAmount(0);
-      toast.success(`Promo code applied! ${discount}% discount`);
+      toast.success(`Áp dụng mã khuyến mãi! Giảm ${discount}%`);
     } else {
-      toast.error("Invalid promo code");
+      toast.error("Mã khuyến mãi không hợp lệ");
     }
   };
 
@@ -430,13 +430,13 @@ Payment Status: ${booking.paymentStatus}`
         },
       ]);
     }
-    toast.success(`${item.name} added to cart`);
+    toast.success(`${item.name} đã được thêm vào giỏ hàng`);
   };
 
   // Remove item from cart
   const removeFromCart = (itemId: string) => {
     setCart(cart.filter((item) => item.itemId !== itemId));
-    toast.info("Item removed from cart");
+    toast.info("Đã xóa mặt hàng khỏi giỏ hàng");
   };
 
   // Update cart quantity
@@ -464,7 +464,7 @@ Payment Status: ${booking.paymentStatus}`
    */
   const handleAddItemsToBooking = async () => {
     if (cart.length === 0) {
-      toast.error("Cart is empty");
+      toast.error("Giỏ hàng trống");
       return;
     }
 
@@ -497,10 +497,10 @@ Payment Status: ${booking.paymentStatus}`
       setCart([]);
       setShowAddItems(false);
 
-      toast.success(`Added ${cart.length} item(s) to booking!`);
+      toast.success(`Đã thêm ${cart.length} mục vào đặt chỗ!`);
     } catch (error) {
       console.error("Error adding items:", error);
-      toast.error("Failed to add items to booking");
+      toast.error("Thêm mặt hàng vào đặt chỗ thất bại");
     } finally {
       setIsAddingOrder(false);
     }
@@ -510,7 +510,7 @@ Payment Status: ${booking.paymentStatus}`
   if (bookingLoading || ordersLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading billing information...</div>
+        <div className="text-lg">Đang tải thông tin thanh toán...</div>
       </div>
     );
   }
@@ -521,9 +521,9 @@ Payment Status: ${booking.paymentStatus}`
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="text-lg text-red-600 mb-4">
-            Failed to load billing information
+            Không tải được thông tin thanh toán
           </div>
-          <Button onClick={() => router.back()}>Go Back</Button>
+          <Button onClick={() => router.back()}>Quay lại</Button>
         </div>
       </div>
     );
@@ -538,8 +538,8 @@ Payment Status: ${booking.paymentStatus}`
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Billing & Payment</h1>
-            <p className="text-gray-500">Booking ID: {bookingId.slice(-8)}</p>
+            <h1 className="text-3xl font-bold">Thanh toán & Hóa đơn</h1>
+            <p className="text-gray-500">Mã đặt chỗ: {bookingId.slice(-8)}</p>
           </div>
         </div>
         <Badge
@@ -560,18 +560,18 @@ Payment Status: ${booking.paymentStatus}`
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Receipt className="h-5 w-5" />
-                  <CardTitle>Booking Details</CardTitle>
+                  <CardTitle>Chi tiết đặt chỗ</CardTitle>
                 </div>
                 <Badge className={getBookingStatusColor(booking.status)}>
                   {booking.status}
                 </Badge>
               </div>
-              <CardDescription>Desk reservation information</CardDescription>
+              <CardDescription>Thông tin đặt chỗ bàn</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Customer Info */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2">Customer</h3>
+                <h3 className="font-semibold mb-2">Khách hàng</h3>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">{booking.customer.name}</p>
                   <p className="text-gray-600">{booking.customer.email}</p>
@@ -581,26 +581,28 @@ Payment Status: ${booking.paymentStatus}`
 
               {/* Desk Info */}
               <div>
-                <h3 className="font-semibold mb-2">Desk Information</h3>
+                <h3 className="font-semibold mb-2">Thông tin bàn</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-sm text-gray-500">Desk</Label>
+                    <Label className="text-sm text-gray-500">Bàn</Label>
                     <p className="font-medium">{booking.deskId.label}</p>
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">Location</Label>
+                    <Label className="text-sm text-gray-500">Vị trí</Label>
                     <p className="font-medium">{booking.deskId.location}</p>
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">Hourly Rate</Label>
+                    <Label className="text-sm text-gray-500">
+                      Giá theo giờ
+                    </Label>
                     <p className="font-medium">
-                      {formatCurrency(booking.deskId.hourlyRate)}/hr
+                      {formatCurrency(booking.deskId.hourlyRate)}/giờ
                     </p>
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">Duration</Label>
+                    <Label className="text-sm text-gray-500">Thời lượng</Label>
                     <p className="font-medium">
-                      {bookingDuration.toFixed(2)} hours
+                      {bookingDuration.toFixed(2)} giờ
                     </p>
                   </div>
                 </div>
@@ -608,16 +610,16 @@ Payment Status: ${booking.paymentStatus}`
 
               {/* Time Info */}
               <div>
-                <h3 className="font-semibold mb-2">Booking Time</h3>
+                <h3 className="font-semibold mb-2">Thời gian đặt</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-sm text-gray-500">Start Time</Label>
+                    <Label className="text-sm text-gray-500">Bắt đầu</Label>
                     <p className="text-sm">
                       {formatDateTime(booking.startTime)}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">End Time</Label>
+                    <Label className="text-sm text-gray-500">Kết thúc</Label>
                     <p className="text-sm">{formatDateTime(booking.endTime)}</p>
                   </div>
                 </div>
@@ -628,10 +630,10 @@ Payment Status: ${booking.paymentStatus}`
               {/* Desk Cost Calculation */}
               <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg">
                 <div>
-                  <p className="text-sm text-gray-600">Desk Rental</p>
+                  <p className="text-sm text-gray-600">Thuê bàn</p>
                   <p className="text-xs text-gray-500">
-                    {bookingDuration.toFixed(2)} hrs ×{" "}
-                    {formatCurrency(booking.deskId.hourlyRate)}/hr
+                    {bookingDuration.toFixed(2)} giờ ×{" "}
+                    {formatCurrency(booking.deskId.hourlyRate)}/giờ
                   </p>
                 </div>
                 <p className="text-xl font-bold text-blue-600">
@@ -647,7 +649,7 @@ Payment Status: ${booking.paymentStatus}`
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="h-5 w-5" />
-                  <CardTitle>Orders</CardTitle>
+                  <CardTitle>Đơn hàng</CardTitle>
                 </div>
                 {/* Add Items Button - only show for active bookings */}
                 {isActiveBooking && !showAddItems && (
@@ -657,12 +659,12 @@ Payment Status: ${booking.paymentStatus}`
                     className="gap-2"
                   >
                     <Plus className="h-4 w-4" />
-                    Add Items
+                    Thêm mặt hàng
                   </Button>
                 )}
               </div>
               <CardDescription>
-                Food, beverages, and items ordered
+                Thực phẩm, đồ uống và mặt hàng đã đặt
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -674,7 +676,7 @@ Payment Status: ${booking.paymentStatus}`
                       <div className="flex items-center gap-2">
                         <ShoppingCart className="h-5 w-5 text-blue-600" />
                         <CardTitle className="text-blue-900">
-                          Add Items to Booking
+                          Thêm mặt hàng vào đặt chỗ
                         </CardTitle>
                       </div>
                       <Button
@@ -690,7 +692,7 @@ Payment Status: ${booking.paymentStatus}`
                       </Button>
                     </div>
                     <CardDescription>
-                      Select items to add to this active booking
+                      Chọn mặt hàng để thêm vào đặt chỗ đang hoạt động
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -698,7 +700,7 @@ Payment Status: ${booking.paymentStatus}`
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
-                        placeholder="Search items..."
+                        placeholder="Tìm kiếm mặt hàng..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-10 bg-white"
@@ -743,7 +745,7 @@ Payment Status: ${booking.paymentStatus}`
                         <Separator />
                         <div className="space-y-3">
                           <h4 className="font-semibold text-sm">
-                            Cart ({cart.length})
+                            Giỏ hàng ({cart.length})
                           </h4>
                           {cart.map((item) => (
                             <div
@@ -755,7 +757,7 @@ Payment Status: ${booking.paymentStatus}`
                                   {item.name}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {formatCurrency(item.price)} each
+                                  {formatCurrency(item.price)} mỗi cái
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
@@ -804,7 +806,9 @@ Payment Status: ${booking.paymentStatus}`
                           ))}
 
                           <div className="flex justify-between items-center pt-2 border-t">
-                            <span className="font-semibold">Cart Total:</span>
+                            <span className="font-semibold">
+                              Tổng giỏ hàng:
+                            </span>
                             <span className="text-lg font-bold text-green-600">
                               {formatCurrency(cartTotal)}
                             </span>
@@ -816,8 +820,8 @@ Payment Status: ${booking.paymentStatus}`
                             disabled={isAddingOrder}
                           >
                             {isAddingOrder
-                              ? "Adding Items..."
-                              : `Add ${cart.length} Item(s) - ${formatCurrency(
+                              ? "Đang thêm..."
+                              : `Thêm ${cart.length} mục - ${formatCurrency(
                                   cartTotal
                                 )}`}
                           </Button>
@@ -831,7 +835,7 @@ Payment Status: ${booking.paymentStatus}`
               {/* Existing Orders List */}
               {orders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  No orders for this booking
+                  Chưa có đơn hàng cho đặt chỗ này
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -840,7 +844,7 @@ Payment Status: ${booking.paymentStatus}`
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <p className="font-semibold">
-                            Order #{order._id.slice(-8)}
+                            Đơn hàng #{order._id.slice(-8)}
                           </p>
                           <p className="text-sm text-gray-500">
                             {formatDateTime(order.orderedAt)}
@@ -874,7 +878,7 @@ Payment Status: ${booking.paymentStatus}`
                       {order.notes && (
                         <div className="mt-3 pt-3 border-t">
                           <p className="text-sm text-gray-600">
-                            <span className="font-medium">Notes:</span>{" "}
+                            <span className="font-medium">Ghi chú:</span>{" "}
                             {order.notes}
                           </p>
                         </div>
@@ -884,7 +888,7 @@ Payment Status: ${booking.paymentStatus}`
 
                       {/* Order Total */}
                       <div className="flex justify-between items-center font-semibold">
-                        <span>Order Total</span>
+                        <span>Tổng đơn hàng</span>
                         <span className="text-lg">
                           {formatCurrency(order.total)}
                         </span>
@@ -904,16 +908,16 @@ Payment Status: ${booking.paymentStatus}`
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Percent className="h-5 w-5" />
-                <CardTitle>Discount & Promo</CardTitle>
+                <CardTitle>Giảm giá & Khuyến mãi</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Promo Code */}
               <div>
-                <Label className="text-sm">Promo Code</Label>
+                <Label className="text-sm">Mã khuyến mãi</Label>
                 <div className="flex gap-2 mt-1">
                   <Input
-                    placeholder="Enter code"
+                    placeholder="Nhập mã"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     className="uppercase"
@@ -923,11 +927,11 @@ Payment Status: ${booking.paymentStatus}`
                     onClick={handleApplyPromo}
                     disabled={!promoCode}
                   >
-                    Apply
+                    Áp dụng
                   </Button>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Try: SAVE10, SAVE20, FIRSTVISIT
+                  Thử: SAVE10, SAVE20, FIRSTVISIT
                 </p>
               </div>
 
@@ -935,7 +939,7 @@ Payment Status: ${booking.paymentStatus}`
 
               {/* Manual Discount */}
               <div>
-                <Label className="text-sm">Discount Percentage</Label>
+                <Label className="text-sm">Phần trăm giảm</Label>
                 <Input
                   type="number"
                   min="0"
@@ -951,7 +955,7 @@ Payment Status: ${booking.paymentStatus}`
               </div>
 
               <div>
-                <Label className="text-sm">Discount Amount ($)</Label>
+                <Label className="text-sm">Số tiền giảm ($)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -972,7 +976,7 @@ Payment Status: ${booking.paymentStatus}`
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                <CardTitle>Payment Summary</CardTitle>
+                <CardTitle>Tóm tắt thanh toán</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -984,14 +988,14 @@ Payment Status: ${booking.paymentStatus}`
                     <div className="flex items-center gap-2 mb-1">
                       <Package className="h-4 w-4 text-green-600" />
                       <span className="text-xs font-semibold text-green-800">
-                        COMBO PACKAGE
+                        GÓI COMBO
                       </span>
                     </div>
                     <p className="text-sm font-medium">
-                      {booking.comboId?.name || "Combo Package"}
+                      {booking.comboId?.name || "Gói combo"}
                     </p>
                     <p className="text-xs text-gray-600">
-                      {booking.comboId?.duration || 0} hours included
+                      {booking.comboId?.duration || 0} giờ
                     </p>
                   </div>
                 )}
@@ -999,8 +1003,8 @@ Payment Status: ${booking.paymentStatus}`
                 <div className="flex justify-between">
                   <span className="text-gray-600">
                     {booking.comboId || booking.isComboBooking
-                      ? "Combo Package"
-                      : "Desk Rental"}
+                      ? "Gói combo"
+                      : "Thuê bàn"}
                   </span>
                   <span className="font-medium">
                     {formatCurrency(deskCost)}
@@ -1018,13 +1022,13 @@ Payment Status: ${booking.paymentStatus}`
                 <Separator />
 
                 <div className="flex justify-between font-medium">
-                  <span>Subtotal</span>
+                  <span>Tạm tính</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
 
                 {calculatedDiscount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Discount</span>
+                    <span>Giảm giá</span>
                     <span>-{formatCurrency(calculatedDiscount)}</span>
                   </div>
                 )}
@@ -1033,7 +1037,7 @@ Payment Status: ${booking.paymentStatus}`
 
                 {/* Total */}
                 <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
-                  <span className="text-lg font-semibold">Total</span>
+                  <span className="text-lg font-semibold">Tổng</span>
                   <span className="text-2xl font-bold">
                     {formatCurrency(finalTotal)}
                   </span>
@@ -1052,12 +1056,10 @@ Payment Status: ${booking.paymentStatus}`
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
                     {isProcessingPayment
-                      ? "Processing..."
+                      ? "Đang xử lý..."
                       : booking.paymentStatus === "pending"
-                      ? `Pay & Complete Check-Out (${formatCurrency(
-                          finalTotal
-                        )})`
-                      : "Complete Check-Out"}
+                      ? `Thanh toán`
+                      : "Check-out thành công"}
                   </Button>
                 )}
 
@@ -1070,7 +1072,9 @@ Payment Status: ${booking.paymentStatus}`
                     disabled={isProcessingPayment}
                   >
                     <DollarSign className="h-4 w-4 mr-2" />
-                    {isProcessingPayment ? "Processing..." : "Mark as Paid"}
+                    {isProcessingPayment
+                      ? "Đang xử lý..."
+                      : "Đánh dấu đã thanh toán"}
                   </Button>
                 )}
 
@@ -1090,7 +1094,7 @@ Payment Status: ${booking.paymentStatus}`
                           d="M5 13l4 4L19 7"
                         />
                       </svg>
-                      <span className="font-medium">Payment Completed</span>
+                      <span className="font-medium">Đã thanh toán</span>
                     </div>
 
                     {/* Print Bill Button */}
@@ -1132,7 +1136,7 @@ Payment Status: ${booking.paymentStatus}`
                         onClick={handleRefund}
                         disabled={isProcessingPayment}
                       >
-                        {isProcessingPayment ? "Processing..." : "Issue Refund"}
+                        {isProcessingPayment ? "Đang xử lý..." : "Hoàn tiền"}
                       </Button>
                     )}
                   </>
@@ -1140,16 +1144,16 @@ Payment Status: ${booking.paymentStatus}`
 
                 {booking.paymentStatus === "refunded" && (
                   <div className="text-center py-3 bg-red-50 rounded-lg text-red-700">
-                    <span className="font-medium">Payment Refunded</span>
+                    <span className="font-medium">Đã hoàn tiền</span>
                   </div>
                 )}
               </div>
 
               {/* Payment Info */}
               <div className="pt-4 border-t text-xs text-gray-500 space-y-1">
-                <p>Booking Created: {formatDateTime(booking.createdAt)}</p>
+                <p>Ngày tạo đặt chỗ: {formatDateTime(booking.createdAt)}</p>
                 <p>
-                  Payment Status:{" "}
+                  Trạng thái thanh toán:{" "}
                   <span className="font-medium">{booking.paymentStatus}</span>
                 </p>
               </div>

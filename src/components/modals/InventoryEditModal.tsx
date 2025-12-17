@@ -38,6 +38,7 @@ const inventorySchema = z.object({
   unit: z.string().min(1, "Unit is required"),
   sku: z.string().min(1, "SKU is required"),
   lowStockThreshold: z.number().min(0, "Low stock threshold must be positive"),
+  duration: z.number().min(0).optional(),
   includedItems: z
     .array(
       z.object({
@@ -92,6 +93,7 @@ export function InventoryEditModal({
       unit: "pcs",
       sku: "",
       lowStockThreshold: 5,
+      duration: undefined,
     },
   });
 
@@ -106,6 +108,7 @@ export function InventoryEditModal({
         unit: item.unit,
         sku: item.sku,
         lowStockThreshold: item.lowStockThreshold,
+        duration: (item as any).duration ?? undefined,
         includedItems: item.includedItems || [],
       });
     } else {
@@ -118,6 +121,7 @@ export function InventoryEditModal({
         unit: "pcs",
         sku: "",
         lowStockThreshold: 5,
+        duration: undefined,
         includedItems: [],
       });
     }
@@ -305,6 +309,28 @@ export function InventoryEditModal({
         {/* Combo builder */}
         {form.watch("category") === "combo" && (
           <div className="mt-4">
+            <div className="mb-3">
+              <FormField
+                control={form.control}
+                name="duration"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (hours)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <h4 className="font-medium mb-2">Combo components</h4>
             <div className="space-y-2">
               {(form.getValues().includedItems || []).map((comp, idx) => (

@@ -97,6 +97,7 @@ export default function InventoryPage() {
     unit: string;
     lowStockThreshold: number;
     includedItems?: { item: string; quantity: number }[];
+    duration?: number | undefined;
     category: "food" | "drinks" | "snacks" | "supplies" | "combo";
     isAvailable: boolean;
     image: string;
@@ -109,6 +110,7 @@ export default function InventoryPage() {
     unit: "pcs",
     lowStockThreshold: 5,
     includedItems: [],
+    duration: undefined,
     category: "food",
     isAvailable: true,
     image: "",
@@ -156,6 +158,7 @@ export default function InventoryPage() {
       };
       if (formData.category === "combo") {
         body.includedItems = formData.includedItems || [];
+        if (formData.duration !== undefined) body.duration = formData.duration;
       }
 
       if (editingItem) {
@@ -224,6 +227,7 @@ export default function InventoryPage() {
       unit: "pcs",
       lowStockThreshold: 5,
       includedItems: [],
+      duration: undefined,
       category: "food",
       isAvailable: true,
       image: "",
@@ -242,6 +246,7 @@ export default function InventoryPage() {
       unit: item.unit || "pcs",
       lowStockThreshold: item.lowStockThreshold || 5,
       includedItems: item.includedItems || [],
+      duration: (item as any).duration ?? undefined,
       category: (item.category as any) || "food",
       isAvailable: item.isAvailable,
       image: item.image || "",
@@ -447,6 +452,25 @@ export default function InventoryPage() {
 
                   {formData.category === "combo" && (
                     <div className="mt-4 border p-3 rounded">
+                      <div className="mb-3">
+                        <label className="text-sm font-medium">
+                          Duration (hours)
+                        </label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={formData.duration ?? ""}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              duration:
+                                e.target.value === ""
+                                  ? undefined
+                                  : parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </div>
                       <h4 className="font-medium mb-2">Combo components</h4>
                       {(formData.includedItems || []).map((comp, idx) => (
                         <div key={idx} className="flex gap-2 items-center mb-2">

@@ -354,7 +354,7 @@ export function BookingEditModal({
                         {availableDesks.map((desk) => (
                           <SelectItem key={desk._id} value={desk._id}>
                             Desk {desk.number} - {desk.label} ($
-                            {desk.hourlyRate}/hr)
+                            {desk.hourlyRate}/giờ)
                           </SelectItem>
                         ))}
                       </SelectContent>

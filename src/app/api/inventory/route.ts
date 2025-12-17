@@ -64,6 +64,7 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       unit,
       imageUrl
     } = body;
+    const { duration } = body;
     // normalize category values coming from clients
     const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
     const { includedItems } = body;
@@ -114,6 +115,14 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       type: category === 'combo' ? 'combo' : 'item',
       includedItems: validatedIncludedItems,
     };
+    // include duration for combo items if provided
+    if (category === 'combo' && duration !== undefined) {
+      const parsed = Number(duration);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return ApiResponses.badRequest('Invalid duration for combo');
+      }
+      itemData.duration = parsed;
+    }
     const item = new InventoryItem(itemData);
 
     await item.save();

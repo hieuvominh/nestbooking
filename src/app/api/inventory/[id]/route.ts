@@ -31,6 +31,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
       stockAdjustment,
       adjustmentType
     } = body;
+    const { duration } = body;
     const { includedItems } = body;
     // normalize category values coming from clients
     const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
@@ -82,6 +83,14 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
         item.includedItems = Array.isArray(includedItems)
           ? includedItems.map((it: any) => ({ item: it.item, quantity: it.quantity || 1 }))
           : [];
+      }
+      // allow updating duration for combos
+      if (duration !== undefined) {
+        const parsed = Number(duration);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return ApiResponses.badRequest('Invalid duration value');
+        }
+        item.duration = parsed;
       }
     }
 

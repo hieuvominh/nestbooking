@@ -68,11 +68,11 @@ export default function BookingsPage() {
 
   const { data: bookingsResponse, mutate: mutateBookings } =
     useApi<BookingsResponse>("/api/bookings", {
-      refreshInterval: 10000, // Poll every 10 seconds
+      refreshInterval: 300000, // Poll every 5 minutes
     });
   const bookings = bookingsResponse?.bookings;
   const { data: desks } = useApi<Desk[]>("/api/desks", {
-    refreshInterval: 10000, // Poll every 10 seconds
+    refreshInterval: 300000, // Poll every 5 minutes
   });
   const { apiCall } = useApi();
 

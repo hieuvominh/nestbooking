@@ -18,6 +18,8 @@ import {
   Package,
   LogOut,
   Building2,
+  Menu,
+  X,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -25,6 +27,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -80,8 +83,8 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg border-r border-slate-200/50 flex flex-col h-screen fixed left-0 top-0">
+      {/* Desktop Sidebar (hidden on small screens) */}
+      <div className="hidden lg:flex w-64 bg-white shadow-lg border-r border-slate-200/50 flex-col h-screen fixed left-0 top-0">
         {/* Logo Section */}
         <div className="flex items-center h-16 px-6 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
           <div className="flex items-center space-x-2">
@@ -222,9 +225,185 @@ export default function AdminLayout({
         </div>
       </div>
 
-      {/* Main content - add margin-left to account for fixed sidebar */}
-      <div className="flex-1 ml-64 overflow-auto">
-        <main className="p-8">
+      {/* Mobile top bar with hamburger (visible on small screens) */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white shadow z-40 flex items-center px-4 justify-between">
+        <div className="flex items-center space-x-2">
+          <Building2 className="h-6 w-6 text-blue-600" />
+          <span className="font-semibold">BookingCoo</span>
+        </div>
+        <button
+          aria-label="Open menu"
+          className="p-2 rounded-md hover:bg-slate-100"
+          onClick={() => setMobileOpen(true)}
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* Mobile drawer (only on small screens) */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-lg border-r border-slate-200/50 flex flex-col">
+            <div className="flex items-center h-16 px-4 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center space-x-2">
+                  <Building2 className="h-7 w-7 text-white" />
+                  <h1 className="text-lg font-bold text-white">BookingCoo</h1>
+                </div>
+                <button
+                  aria-label="Close menu"
+                  className="p-1 rounded-md hover:bg-white/10 text-white"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <X className="h-5 w-5 text-white" />
+                </button>
+              </div>
+            </div>
+
+            <nav className="flex-1 mt-4 px-4 overflow-y-auto">
+              <div className="space-y-2">
+                {navigation.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm"
+                      }`}
+                    >
+                      <Icon
+                        className={`mr-3 h-5 w-5 ${
+                          isActive
+                            ? "text-white"
+                            : "text-slate-500 group-hover:text-slate-700"
+                        }`}
+                      />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+
+                <div className="pt-6">
+                  <div className="pb-2">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3">
+                      Cài đặt
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSettingsExpanded(!settingsExpanded)}
+                    className={`group flex items-center justify-between w-full px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                      pathname.startsWith("/admin/settings/")
+                        ? "bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-md shadow-slate-500/25"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:shadow-sm"
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <Settings
+                        className={`mr-3 h-5 w-5 ${
+                          pathname.startsWith("/admin/settings/")
+                            ? "text-white"
+                            : "text-slate-500 group-hover:text-slate-700"
+                        }`}
+                      />
+                      <span>Cài đặt</span>
+                    </div>
+                    {settingsExpanded ? (
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-200 ${
+                          pathname.startsWith("/admin/settings/")
+                            ? "text-white"
+                            : "text-slate-500"
+                        }`}
+                      />
+                    ) : (
+                      <ChevronRight
+                        className={`h-4 w-4 transition-transform duration-200 ${
+                          pathname.startsWith("/admin/settings/")
+                            ? "text-white"
+                            : "text-slate-500"
+                        }`}
+                      />
+                    )}
+                  </button>
+
+                  {settingsExpanded && (
+                    <div className="mt-2 space-y-1 animate-in slide-in-from-top-1 duration-200">
+                      {settingsNavigation.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = pathname === item.href;
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={() => setMobileOpen(false)}
+                            className={`group flex items-center pl-6 pr-3 py-2.5 text-sm rounded-lg transition-all duration-200 ${
+                              isActive
+                                ? "bg-blue-50 text-blue-700 border-r-2 border-blue-500"
+                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
+                          >
+                            <Icon
+                              className={`mr-3 h-4 w-4 ${
+                                isActive
+                                  ? "text-blue-600"
+                                  : "text-slate-400 group-hover:text-slate-600"
+                              }`}
+                            />
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </nav>
+
+            <div className="flex-shrink-0 p-4 border-t border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-slate-800">
+                      {user?.name}
+                    </span>
+                    <span className="text-xs text-slate-500 capitalize">
+                      {user?.role}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    logout();
+                  }}
+                  className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main content - add margin-left to account for fixed sidebar on md+ */}
+      <div className="flex-1 lg:ml-64 overflow-auto">
+        {/* padding-top to make room for mobile top bar */}
+        <main className="p-8 pt-20 lg:pt-8">
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
