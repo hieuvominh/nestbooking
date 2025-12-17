@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { formatCurrency } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -20,7 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, Edit, Link, Copy, DollarSign, Trash2 } from "lucide-react";
 import { BookingEditModal } from "@/components/modals";
 
 interface Booking {
@@ -66,8 +69,30 @@ export default function BookingsPage() {
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Filters
+  const [startDate, setStartDate] = useState<string>(""); // yyyy-mm-dd
+  const [endDate, setEndDate] = useState<string>("");
+  const [onlyToday, setOnlyToday] = useState<boolean>(false);
+
+  const bookingsUrl = useMemo(() => {
+    const base = "/api/bookings";
+    const params = new URLSearchParams();
+
+    if (onlyToday) {
+      const today = new Date().toISOString().slice(0, 10);
+      params.set("startDate", `${today}T00:00:00`);
+      params.set("endDate", `${today}T23:59:59`);
+    } else if (startDate && endDate) {
+      params.set("startDate", `${startDate}T00:00:00`);
+      params.set("endDate", `${endDate}T23:59:59`);
+    }
+
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  }, [startDate, endDate, onlyToday]);
+
   const { data: bookingsResponse, mutate: mutateBookings } =
-    useApi<BookingsResponse>("/api/bookings", {
+    useApi<BookingsResponse>(bookingsUrl, {
       refreshInterval: 300000, // Poll every 5 minutes
     });
   const bookings = bookingsResponse?.bookings;
@@ -205,14 +230,70 @@ export default function BookingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:gap-4 gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="startDate" className="text-sm">
+                Từ ngày
+              </Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label htmlFor="endDate" className="text-sm">
+                Đến ngày
+              </Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="onlyToday"
+                checked={onlyToday}
+                onCheckedChange={(c) => {
+                  const checked = c === true;
+                  setOnlyToday(checked);
+                  if (checked) {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setStartDate(today);
+                    setEndDate(today);
+                  }
+                }}
+              />
+              <Label htmlFor="onlyToday" className="text-sm cursor-pointer">
+                Chỉ hôm nay
+              </Label>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStartDate("");
+                  setEndDate("");
+                  setOnlyToday(false);
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Khách hàng</TableHead>
-                <TableHead>Bàn</TableHead>
                 <TableHead>Thời gian bắt đầu</TableHead>
                 <TableHead>Thời gian kết thúc</TableHead>
-                <TableHead>Trạng thái</TableHead>
+                <TableHead className="min-w-[150px]">Trạng thái</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Thanh toán</TableHead>
                 <TableHead>Hành động</TableHead>
@@ -233,12 +314,11 @@ export default function BookingsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>Desk {booking.deskNumber}</TableCell>
                   <TableCell>{formatDateTime(booking.startTime)}</TableCell>
                   <TableCell>{formatDateTime(booking.endTime)}</TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-[150px]">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
                         booking.status
                       )}`}
                     >
@@ -273,34 +353,39 @@ export default function BookingsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1">
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="icon"
+                        variant="ghost"
+                        title="Sửa"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEdit(booking);
                         }}
                       >
-                        Sửa
+                        <Edit className="h-4 w-4" />
                       </Button>
+
                       {!booking.publicToken &&
                         booking.status === "confirmed" && (
                           <Button
-                            size="sm"
-                            variant="outline"
+                            size="icon"
+                            variant="ghost"
+                            title="Tạo URL công khai"
                             onClick={(e) => {
                               e.stopPropagation();
                               generatePublicUrl(booking._id);
                             }}
                           >
-                            Tạo URL
+                            <Link className="h-4 w-4" />
                           </Button>
                         )}
+
                       {booking.publicToken && (
                         <Button
-                          size="sm"
-                          variant="outline"
+                          size="icon"
+                          variant="ghost"
+                          title="Sao chép URL công khai"
                           onClick={(e) => {
                             e.stopPropagation();
                             navigator.clipboard.writeText(
@@ -309,32 +394,36 @@ export default function BookingsPage() {
                             alert("Đã sao chép URL công khai vào clipboard!");
                           }}
                         >
-                          Sao chép URL
+                          <Copy className="h-4 w-4" />
                         </Button>
                       )}
+
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="icon"
+                        variant="ghost"
+                        title="Thanh toán"
                         onClick={(e) => {
                           e.stopPropagation();
                           router.push(`/admin/billing/${booking._id}`);
                         }}
-                        className="bg-green-50 text-green-600 hover:bg-green-100"
+                        className="text-green-600"
                       >
-                        Thanh toán
+                        <DollarSign className="h-4 w-4" />
                       </Button>
+
                       {booking.status !== "cancelled" &&
                         booking.status !== "completed" && (
                           <Button
-                            size="sm"
-                            variant="outline"
+                            size="icon"
+                            variant="ghost"
+                            title="Xóa"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDelete(booking._id);
                             }}
-                            className="text-red-600 hover:bg-red-50"
+                            className="text-red-600"
                           >
-                            Xóa
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
                     </div>

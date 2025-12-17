@@ -9,11 +9,11 @@ import { formatCurrency } from "@/lib/currency";
 /**
  * PrintBill Component
  *
- * Generates a thermal printer-friendly bill (80mm width) for paid bookings.
+ * Generates a thermal printer-friendly bill (58mm width) for paid bookings.
  * Uses react-to-print library to isolate and print ONLY the bill content.
  *
  * Features:
- * - Optimized for 80mm thermal paper (302px width)
+ * - Optimized for 58mm thermal paper (≈219px width)
  * - Monospace font for consistent alignment
  * - Clear sections: Header, Customer Info, Booking Details, Items, Totals
  * - Completely isolated print - no sidebar or UI elements visible
@@ -58,6 +58,8 @@ interface PrintBillProps {
   deskHourlyRate?: number;
   className?: string;
   showDebugInfo?: boolean; // Optional: show width measurement on bill
+  autoPrint?: boolean; // If true, trigger print automatically when component mounts
+  onAfterAutoPrint?: () => void; // Callback after automatic print completes
 }
 
 export function PrintBill({
@@ -66,6 +68,8 @@ export function PrintBill({
   deskHourlyRate = 5,
   className,
   showDebugInfo = false,
+  autoPrint = false,
+  onAfterAutoPrint,
 }: PrintBillProps) {
   const componentRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +79,7 @@ export function PrintBill({
     documentTitle: `Bill-${booking._id.slice(-8)}`,
     pageStyle: `
       @page {
-        size: 80mm auto;
+        size: 58mm auto;
         margin: 0;
       }
       @media print {
@@ -85,6 +89,10 @@ export function PrintBill({
         }
       }
     `,
+    // after print, notify parent if requested
+    onAfterPrint: () => {
+      if (onAfterAutoPrint) onAfterAutoPrint();
+    },
   });
 
   // Calculate booking duration in hours
@@ -147,9 +155,10 @@ export function PrintBill({
   // currency formatting uses VNĐ via util
 
   // Pad text for alignment (simple left/right padding)
-  const padLine = (left: string, right: string, totalWidth: number = 32) => {
+  // Adjust default chars-per-line for ~58mm (≈23 chars)
+  const padLine = (left: string, right: string, totalWidth: number = 23) => {
     const leftPart = left.slice(0, totalWidth - right.length);
-    const padding = " ".repeat(
+    const padding = " s".repeat(
       Math.max(0, totalWidth - leftPart.length - right.length)
     );
     return leftPart + padding + right;
@@ -169,6 +178,22 @@ export function PrintBill({
   const duration = calculateDuration();
   const currentDateTime = new Date().toLocaleString("vi-VN");
 
+  // Trigger auto-print when requested and allowed
+  React.useEffect(() => {
+    if (autoPrint && canPrint) {
+      // slight delay to ensure DOM is ready
+      setTimeout(() => {
+        try {
+          handlePrint?.();
+        } catch (e) {
+          // ignore print errors
+          // console.error("Auto print failed", e);
+        }
+      }, 250);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrint, canPrint]);
+
   return (
     <>
       {/* Print Button */}
@@ -182,7 +207,7 @@ export function PrintBill({
         <div ref={componentRef}>
           <div
             style={{
-              width: "302px",
+              width: "219px",
               margin: "0 auto",
               padding: "10px",
               fontFamily: "'Courier New', monospace",
@@ -404,8 +429,8 @@ export function PrintBill({
                   borderTop: "1px dashed #ccc",
                 }}
               >
-                <div>📏 Width: 302px (80mm @ 96 DPI)</div>
-                <div>Character width: 32 chars/line</div>
+                <div>📏 Width: 219px (58mm @ 96 DPI)</div>
+                <div>Character width: 23 chars/line</div>
                 <div>Font: Courier New 12px</div>
               </div>
             )}

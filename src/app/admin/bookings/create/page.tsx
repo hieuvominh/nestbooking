@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+// Checkbox removed: we no longer offer "Đặt Trước" in create flow; redirect to billing instead
 import {
   Select,
   SelectContent,
@@ -117,6 +117,18 @@ export default function CreateBookingPage() {
     null
   );
 
+  // Duration in hours for manual bookings (used when no combo selected)
+  const [durationHours, setDurationHours] = useState<number>(1);
+  // Reveal time-based pricing only after user clicks create
+  const [revealTimeCost, setRevealTimeCost] = useState<boolean>(false);
+
+  // Check-in time preview (disabled) — actual check-in time will be set to current time when creating
+  const [startPreview, setStartPreview] = useState<string>(() => {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    return now.toISOString().slice(0, 16);
+  });
+
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -128,26 +140,41 @@ export default function CreateBookingPage() {
   >("pending");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Booking timing state
-  const [isBookingForLater, setIsBookingForLater] = useState(false);
-
   // Auto-update end time when combo is selected
   useEffect(() => {
+    // If a combo is selected, its fixed duration defines endTime
     if (selectedCombo && selectedCombo.duration && formData.startTime) {
-      // Parse the datetime-local string directly without timezone conversion
       const [datePart, timePart] = formData.startTime.split("T");
       const [year, month, day] = datePart.split("-").map(Number);
       const [hours, minutes] = timePart.split(":").map(Number);
 
-      // Create date using local timezone
       const startDate = new Date(year, month - 1, day, hours, minutes);
-
-      // Add combo duration hours
       const endDate = new Date(
         startDate.getTime() + selectedCombo.duration * 60 * 60 * 1000
       );
 
-      // Format back to datetime-local format (YYYY-MM-DDTHH:mm)
+      const endYear = endDate.getFullYear();
+      const endMonth = String(endDate.getMonth() + 1).padStart(2, "0");
+      const endDay = String(endDate.getDate()).padStart(2, "0");
+      const endHours = String(endDate.getHours()).padStart(2, "0");
+      const endMinutes = String(endDate.getMinutes()).padStart(2, "0");
+      const endTimeString = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
+
+      setFormData((prev) => ({ ...prev, endTime: endTimeString }));
+      return; // combo takes precedence
+    }
+
+    // If no combo selected, compute endTime from startTime + durationHours
+    if (!selectedCombo && formData.startTime && durationHours > 0) {
+      const [datePart, timePart] = formData.startTime.split("T");
+      const [year, month, day] = datePart.split("-").map(Number);
+      const [hours, minutes] = timePart.split(":").map(Number);
+
+      const startDate = new Date(year, month - 1, day, hours, minutes);
+      const endDate = new Date(
+        startDate.getTime() + durationHours * 60 * 60 * 1000
+      );
+
       const endYear = endDate.getFullYear();
       const endMonth = String(endDate.getMonth() + 1).padStart(2, "0");
       const endDay = String(endDate.getDate()).padStart(2, "0");
@@ -157,7 +184,7 @@ export default function CreateBookingPage() {
 
       setFormData((prev) => ({ ...prev, endTime: endTimeString }));
     }
-  }, [selectedCombo, formData.startTime]);
+  }, [selectedCombo, formData.startTime, durationHours]);
 
   // Get selected desk details
   const selectedDesk = useMemo(() => {
@@ -166,17 +193,18 @@ export default function CreateBookingPage() {
 
   // Calculate booking duration in hours
   const bookingDuration = useMemo(() => {
-    if (!formData.startTime || !formData.endTime) return 0;
-    const start = new Date(formData.startTime);
-    const end = new Date(formData.endTime);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    return hours > 0 ? hours : 0;
-  }, [formData.startTime, formData.endTime]);
+    return durationHours;
+  }, [durationHours]);
 
   // Calculate desk cost based on combo or regular booking
   // If combo selected: use combo price (ignores hourly rate)
   // If no combo: use desk hourly rate × duration
   const deskCost = useMemo(() => {
+    console.log("Calculating desk cost:", selectedCombo, {
+      selectedDesk,
+      bookingDuration,
+    });
+
     if (selectedCombo) {
       // Combo selected: use fixed combo price
       return selectedCombo.price;
@@ -197,6 +225,41 @@ export default function CreateBookingPage() {
   const grandTotal = useMemo(() => {
     return deskCost + inventoryTotal;
   }, [deskCost, inventoryTotal]);
+
+  // For the cart display, optionally hide the time-based desk cost until
+  // the user actually creates the booking (controlled by revealTimeCost).
+  const displayedDeskCost = revealTimeCost ? deskCost : 0;
+  const displayedGrandTotal = displayedDeskCost + inventoryTotal;
+
+  // Represent the desk (or selected combo) as a cart-like item so it appears
+  // in the right-column cart list. Price uses displayedDeskCost so it will be
+  // hidden (0) until revealTimeCost is true.
+  const deskCartEntry = selectedCombo
+    ? {
+        id: `combo-${selectedCombo._id}`,
+        name: `Gói: ${selectedCombo.name}`,
+        price: selectedCombo.price,
+        quantity: 1,
+        isCombo: true,
+      }
+    : selectedDesk
+    ? {
+        id: `desk-${selectedDesk._id}`,
+        name: `Thuê Bàn - ${selectedDesk.label}`,
+        price: displayedDeskCost,
+        quantity: 1,
+        isCombo: false,
+      }
+    : null;
+
+  const clearDeskSelection = () => {
+    // Clear desk selection and reset duration
+    setFormData((prev) => ({ ...prev, deskId: "", endTime: "" }));
+    setDurationHours(1);
+    setSelectedCombo(null);
+    setRevealTimeCost(false);
+    toast.info("Đã xóa chọn bàn/gói");
+  };
 
   // Filter inventory based on search, category, and view mode
   const filteredInventory = useMemo(() => {
@@ -247,10 +310,45 @@ export default function CreateBookingPage() {
   // Clear combo selection
   const clearCombo = () => {
     setSelectedCombo(null);
-    // Reset end time to allow manual input
-    setFormData((prev) => ({ ...prev, endTime: "" }));
+    // Reset combo and compute endTime from durationHours if startTime exists
+    if (formData.startTime && durationHours > 0) {
+      const [datePart, timePart] = formData.startTime.split("T");
+      const [year, month, day] = datePart.split("-").map(Number);
+      const [hours, minutes] = timePart.split(":").map(Number);
+
+      const startDate = new Date(year, month - 1, day, hours, minutes);
+      const endDate = new Date(
+        startDate.getTime() + durationHours * 60 * 60 * 1000
+      );
+
+      const endYear = endDate.getFullYear();
+      const endMonth = String(endDate.getMonth() + 1).padStart(2, "0");
+      const endDay = String(endDate.getDate()).padStart(2, "0");
+      const endHours = String(endDate.getHours()).padStart(2, "0");
+      const endMinutes = String(endDate.getMinutes()).padStart(2, "0");
+      const endTimeString = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
+
+      setFormData((prev) => ({ ...prev, endTime: endTimeString }));
+    } else {
+      setFormData((prev) => ({ ...prev, endTime: "" }));
+    }
+    setRevealTimeCost(false);
     toast.info("Đã xóa combo. Bạn có thể tự chọn thời lượng.");
   };
+
+  // Automatically reveal time-based pricing when a desk + duration is selected
+  // or when a combo is selected. Hide it otherwise.
+  useEffect(() => {
+    if (selectedCombo) {
+      setRevealTimeCost(true);
+      return;
+    }
+    if (selectedDesk && durationHours > 0) {
+      setRevealTimeCost(true);
+      return;
+    }
+    setRevealTimeCost(false);
+  }, [selectedCombo, selectedDesk, durationHours]);
 
   // Add item to cart
   const addToCart = (item: InventoryItem) => {
@@ -340,18 +438,6 @@ export default function CreateBookingPage() {
       toast.error("Vui lòng chọn bàn");
       return false;
     }
-    if (!formData.startTime) {
-      toast.error("Vui lòng chọn giờ bắt đầu");
-      return false;
-    }
-    if (!formData.endTime) {
-      toast.error("Vui lòng chọn giờ kết thúc");
-      return false;
-    }
-    if (bookingDuration <= 0) {
-      toast.error("Giờ kết thúc phải sau giờ bắt đầu");
-      return false;
-    }
     return true;
   };
 
@@ -364,15 +450,34 @@ export default function CreateBookingPage() {
     setIsSubmitting(true);
 
     try {
-      // Determine booking status based on timing
-      // If booking for later: status = pending
-      // If booking for now: status = checked-in (with checkedInAt timestamp)
-      const bookingStatus = isBookingForLater ? "pending" : "checked-in";
-      const checkedInAt = isBookingForLater
-        ? undefined
-        : new Date().toISOString();
+      // Compute actual start (check-in) and end times now (start = now)
+      const now = new Date();
+      now.setSeconds(0, 0);
+      const startIso = now.toISOString().slice(0, 16);
 
-      // Step 1: Create the booking
+      let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+      if (selectedCombo && selectedCombo.duration) {
+        endDate = new Date(
+          now.getTime() + selectedCombo.duration * 60 * 60 * 1000
+        );
+      }
+      const endIso = endDate.toISOString().slice(0, 16);
+
+      // Basic validation for computed times
+      if (endDate.getTime() <= now.getTime()) {
+        toast.error("Giờ kết thúc phải sau giờ bắt đầu");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Persist computed times to formData for UI consistency
+      setFormData((prev) => ({
+        ...prev,
+        startTime: startIso,
+        endTime: endIso,
+      }));
+
+      // Always create booking and redirect to billing page for payment/invoice
       const bookingData = {
         customer: {
           name: formData.customerName,
@@ -380,13 +485,13 @@ export default function CreateBookingPage() {
           phone: formData.customerPhone || undefined,
         },
         deskId: formData.deskId,
-        startTime: formData.startTime,
-        endTime: formData.endTime,
-        status: bookingStatus,
+        startTime: startIso,
+        endTime: endIso,
+        // default to pending; payment will be handled on the billing page
+        status: "pending",
         totalAmount: grandTotal,
         paymentStatus: paymentStatus,
         notes: formData.notes,
-        ...(checkedInAt && { checkedInAt }),
       };
 
       const bookingResponse: { booking?: { _id: string }; _id?: string } =
@@ -426,8 +531,8 @@ export default function CreateBookingPage() {
 
       toast.success("Đã tạo đặt bàn thành công!");
 
-      // Redirect to booking detail page
-      router.push(`/admin/bookings/${bookingId}`);
+      // Redirect to billing page so user can pay and view invoice
+      router.push(`/admin/billing/${bookingId}`);
     } catch (error) {
       console.error("Error creating booking:", error);
       toast.error("Tạo đặt bàn thất bại. Vui lòng thử lại.");
@@ -488,6 +593,7 @@ export default function CreateBookingPage() {
                     required
                   />
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="customerEmail">Email</Label>
@@ -553,7 +659,35 @@ export default function CreateBookingPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
+                {!selectedCombo && selectedDesk && (
+                  <div className="mb-3">
+                    <Label htmlFor="durationHours">Số giờ *</Label>
+                    <Input
+                      id="durationHours"
+                      type="number"
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={durationHours}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        const intVal = Number.isFinite(v)
+                          ? Math.max(1, Math.floor(v))
+                          : 1;
+                        setDurationHours(intVal);
+                      }}
+                      onBlur={(e) => {
+                        // ensure integer on blur
+                        const v = Number(e.target.value);
+                        const intVal = Number.isFinite(v)
+                          ? Math.max(1, Math.floor(v))
+                          : 1;
+                        setDurationHours(intVal);
+                      }}
+                    />
+                  </div>
+                )}
                 {selectedDesk && !selectedCombo && (
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <p className="text-sm font-medium">
@@ -615,15 +749,16 @@ export default function CreateBookingPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="startTime">Giờ Bắt Đầu *</Label>
+                    <Label htmlFor="startTime">
+                      Giờ Check-in (tự động khi tạo)
+                    </Label>
                     <Input
                       id="startTime"
                       type="datetime-local"
-                      value={formData.startTime}
-                      onChange={(e) =>
-                        setFormData({ ...formData, startTime: e.target.value })
-                      }
-                      required
+                      value={startPreview}
+                      disabled
+                      className="bg-gray-100 cursor-not-allowed"
+                      readOnly
                     />
                   </div>
                   <div>
@@ -639,61 +774,29 @@ export default function CreateBookingPage() {
                       id="endTime"
                       type="datetime-local"
                       value={formData.endTime}
-                      onChange={(e) =>
-                        setFormData({ ...formData, endTime: e.target.value })
-                      }
-                      disabled={!!selectedCombo}
+                      disabled
                       required
-                      className={
-                        selectedCombo ? "bg-gray-100 cursor-not-allowed" : ""
-                      }
+                      className="bg-gray-100 cursor-not-allowed"
                     />
                   </div>
                 </div>
 
-                {/* Book for Later Checkbox */}
-                <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <Checkbox
-                    id="bookForLater"
-                    checked={isBookingForLater}
-                    onCheckedChange={(checked) =>
-                      setIsBookingForLater(checked === true)
-                    }
-                  />
-                  <Label
-                    htmlFor="bookForLater"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    Đặt Trước (Trạng thái: Chờ)
-                  </Label>
-                  <div className="ml-auto">
-                    <Badge
-                      variant={isBookingForLater ? "secondary" : "default"}
-                    >
-                      {isBookingForLater ? "Chờ" : "Đã Check-in"}
-                    </Badge>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-600 -mt-2 ml-1">
-                  {isBookingForLater
-                    ? "Khách sẽ check-in khi đến. Trạng thái sẽ là 'Chờ'."
-                    : "Khách đang check-in ngay. Trạng thái sẽ là 'Đã Check-in'."}
-                </p>
+                {/* Removed 'Đặt Trước' flow: create booking redirects to billing for payment/invoice */}
 
-                {bookingDuration > 0 && !selectedCombo && (
+                {revealTimeCost && bookingDuration > 0 && !selectedCombo && (
                   <div className="bg-green-50 p-3 rounded-lg">
                     <p className="text-sm">
                       <Clock className="inline h-4 w-4 mr-1" />
                       Thời Lượng:{" "}
                       <span className="font-semibold">
-                        {bookingDuration.toFixed(2)} giờ
+                        {Math.floor(bookingDuration)} giờ
                       </span>
                     </p>
                     <p className="text-sm mt-1">
                       <DollarSign className="inline h-4 w-4 mr-1" />
                       Phí Bàn:{" "}
                       <span className="font-semibold">
-                        ${deskCost.toFixed(2)}
+                        {formatCurrency(deskCost)}
                       </span>
                     </p>
                   </div>
@@ -994,13 +1097,61 @@ export default function CreateBookingPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {cart.length === 0 ? (
+                {cart.length === 0 && !deskCartEntry ? (
                   <div className="text-center py-8 text-gray-500">
                     <ShoppingCart className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                     <p>Không có món trong giỏ</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    {/* Desk/combo pseudo-item first (if selected) */}
+                    {deskCartEntry && (
+                      <div
+                        key={deskCartEntry.id}
+                        className="border rounded-lg p-3"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-sm">
+                              {deskCartEntry.name}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              {!deskCartEntry.isCombo && formData.startTime
+                                ? `Thời lượng: ${Math.max(
+                                    1,
+                                    durationHours
+                                  )} giờ`
+                                : deskCartEntry.isCombo
+                                ? "Gói cố định"
+                                : "Chưa chọn bàn"}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={clearDeskSelection}
+                          >
+                            <Trash2 className="h-3 w-3 text-red-500" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-8 text-center font-medium">
+                              {deskCartEntry.quantity}
+                            </span>
+                          </div>
+                          <span className="font-bold">
+                            {formatCurrency(
+                              deskCartEntry.price * deskCartEntry.quantity
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regular cart items */}
                     {cart.map((item) => (
                       <div key={item.itemId} className="border rounded-lg p-3">
                         <div className="flex justify-between items-start mb-2">
@@ -1009,7 +1160,7 @@ export default function CreateBookingPage() {
                               {item.name}
                             </h4>
                             <p className="text-xs text-gray-500">
-                              ${item.price.toFixed(2)} mỗi
+                              {formatCurrency(item.price)}
                             </p>
                           </div>
                           <Button
@@ -1096,57 +1247,20 @@ export default function CreateBookingPage() {
                   <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
                     <span className="text-lg font-semibold">Tổng Cộng</span>
                     <span className="text-2xl font-bold">
-                      {formatCurrency(grandTotal)}
+                      {formatCurrency(displayedGrandTotal)}
                     </span>
                   </div>
                 </div>
-
-                {/* Payment Status */}
-                <div className="space-y-3">
-                  <Label>Trạng Thái Thanh Toán</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant={
-                        paymentStatus === "pending" ? "default" : "outline"
-                      }
-                      className="flex-1"
-                      onClick={() => setPaymentStatus("pending")}
-                    >
-                      Chờ
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={paymentStatus === "paid" ? "default" : "outline"}
-                      className="flex-1"
-                      onClick={handlePayNow}
-                    >
-                      Đã Thanh Toán
-                    </Button>
-                  </div>
-                  <Badge
-                    className={`w-full justify-center py-2 ${getPaymentStatusColor(
-                      paymentStatus
-                    )}`}
-                  >
-                    {paymentStatus === "pending"
-                      ? "CHỜ THANH TOÁN"
-                      : paymentStatus === "paid"
-                      ? "ĐÃ THANH TOÁN"
-                      : "ĐÃ HOÀN TIỀN"}
-                  </Badge>
-                </div>
-
                 {/* Submit Button */}
                 <Button
                   type="submit"
                   className="w-full"
                   size="lg"
-                  disabled={isSubmitting || grandTotal === 0}
+                  disabled={isSubmitting || displayedGrandTotal === 0}
                 >
                   {isSubmitting
                     ? "Đang tạo đặt bàn..."
-                    : `Tạo Đặt Bàn - ${formatCurrency(grandTotal)}`}
+                    : `Tạo Đặt Bàn - ${formatCurrency(displayedGrandTotal)}`}
                 </Button>
 
                 {/* Info */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
@@ -265,6 +265,17 @@ export default function BillingPage() {
       setIsProcessingPayment(false);
     }
   };
+
+  // Trigger print when payment completes
+  const [triggerPrint, setTriggerPrint] = useState(false);
+
+  // Ensure we trigger print when booking status flips to 'paid' (after mutateBooking finishes)
+  useEffect(() => {
+    if (booking && booking.paymentStatus === "paid") {
+      // set trigger (no-op if already true)
+      setTriggerPrint(true);
+    }
+  }, [booking?.paymentStatus]);
 
   const handleRefund = async () => {
     if (!booking) return;
@@ -839,7 +850,7 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order) => (
+                  {orders.map((order, idx) => (
                     <div key={order._id} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
@@ -857,6 +868,20 @@ export default function BillingPage() {
 
                       {/* Order Items */}
                       <div className="space-y-2">
+                        {orders.indexOf(order) === 0 && (
+                          <div className="flex justify-between items-center text-sm mt-3">
+                            <div className="flex-1">
+                              <p className="font-medium">Thuê bàn</p>
+                              <p className="text-gray-500">
+                                {bookingDuration} giờ ×{" "}
+                                {formatCurrency(booking.deskId.hourlyRate)}/giờ
+                              </p>
+                            </div>
+                            <p className="font-semibold">
+                              {formatCurrency(deskCost)}
+                            </p>
+                          </div>
+                        )}
                         {order.items.map((item, idx) => (
                           <div
                             key={idx}
@@ -873,7 +898,13 @@ export default function BillingPage() {
                             </p>
                           </div>
                         ))}
+
+                        {/* Show desk charge once (rendered in the first order card) so staff see desk money alongside orders */}
+                        {typeof idx !== "undefined" /* keep lint happy */ &&
+                          null}
                       </div>
+
+                      {/* Render desk charge inside the first order card so it's visible near order items */}
 
                       {order.notes && (
                         <div className="mt-3 pt-3 border-t">
@@ -1068,13 +1099,16 @@ export default function BillingPage() {
                   <Button
                     className="w-full"
                     size="lg"
-                    onClick={handleMarkAsPaid}
+                    onClick={async () => {
+                      // mark as paid, then trigger print
+                      await handleMarkAsPaid();
+                      // small delay to allow mutateBooking to refresh booking -> PrintBill render
+                      setTimeout(() => setTriggerPrint(true), 300);
+                    }}
                     disabled={isProcessingPayment}
                   >
                     <DollarSign className="h-4 w-4 mr-2" />
-                    {isProcessingPayment
-                      ? "Đang xử lý..."
-                      : "Đánh dấu đã thanh toán"}
+                    {isProcessingPayment ? "Đang xử lý..." : "Thanh toán"}
                   </Button>
                 )}
 
@@ -1099,6 +1133,8 @@ export default function BillingPage() {
 
                     {/* Print Bill Button */}
                     <PrintBill
+                      autoPrint={triggerPrint}
+                      onAfterAutoPrint={() => setTriggerPrint(false)}
                       booking={{
                         _id: booking._id,
                         customer: {
