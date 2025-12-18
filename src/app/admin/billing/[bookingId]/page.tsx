@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,7 @@ interface InventoryItem {
   quantity: number;
   unit?: string;
   type?: "item" | "combo";
+  duration?: number;
 }
 
 interface CartItem {
@@ -156,7 +157,16 @@ export default function BillingPage() {
 
   const { apiCall } = useApi();
 
+  // Local cache for combo details when booking.comboId is an id (not populated)
+  const [comboDetails, setComboDetails] = useState<InventoryItem | null>(null);
+
+  // Local in-memory cache for inventory lookups to avoid repeated network calls
+  const inventoryCacheRef = useRef<Record<string, InventoryItem | null>>({});
+
   const orders = ordersResponse?.orders || [];
+
+  console.log(comboDetails);
+  console.log(booking);
 
   // Calculate booking duration in hours
   const bookingDuration = useMemo(() => {
@@ -175,8 +185,9 @@ export default function BillingPage() {
     if (!booking) return 0;
 
     // Check if this is a combo booking
+    const combo = comboDetails || (booking.comboId as any);
     if (booking.comboId || booking.isComboBooking) {
-      return booking.comboId?.price || 0;
+      return (combo && combo.price) || 0;
     }
 
     // Regular desk booking - calculate based on hourly rate
@@ -187,6 +198,207 @@ export default function BillingPage() {
   const ordersTotal = useMemo(() => {
     return orders.reduce((sum, order) => sum + order.total, 0);
   }, [orders]);
+
+  // Flattened list of order items for detailed display
+  const orderItemsFlattened = useMemo(() => {
+    return orders.flatMap((o) =>
+      o.items.map((it) => ({
+        name: it.name,
+        price: it.price,
+        quantity: it.quantity,
+        subtotal: it.subtotal,
+      }))
+    );
+  }, [orders]);
+
+  // Combo included items - normalized and enriched (async fetch when entries are ids)
+  const [comboIncludedItems, setComboIncludedItems] = useState<
+    { name: string; price: number; quantity: number }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const combo = (comboDetails as any) || (booking?.comboId as any);
+    if (!combo) {
+      setComboIncludedItems([]);
+      return;
+    }
+
+    const raw =
+      combo.includedItems ||
+      combo.items ||
+      combo.contents ||
+      combo.comboItems ||
+      [];
+    if (!Array.isArray(raw) || raw.length === 0) {
+      setComboIncludedItems([]);
+      return;
+    }
+
+    const enrich = async () => {
+      // collect ids we need to fetch
+      const idsToFetch: string[] = [];
+      const entries = raw.map((it: any) => {
+        if (!it) return { _raw: it };
+        if (typeof it === "string") return { id: it };
+
+        // itemId may be object or id
+        const itemId = it.itemId ?? it.item ?? null;
+        if (itemId && typeof itemId === "string") {
+          idsToFetch.push(itemId);
+          return {
+            id: itemId,
+            quantity: Number(it.quantity ?? it.qty ?? 1) || 1,
+          };
+        }
+
+        if (itemId && typeof itemId === "object") {
+          // has _id but maybe missing name/price
+          if (itemId._id && (!itemId.name || !itemId.price)) {
+            idsToFetch.push(String(itemId._id));
+            return {
+              id: String(itemId._id),
+              qty: Number(it.quantity ?? it.qty ?? 1) || 1,
+              rawItem: itemId,
+            };
+          }
+          // fully populated
+          return {
+            name: itemId.name,
+            price: Number(itemId.price ?? 0) || 0,
+            quantity: Number(it.quantity ?? it.qty ?? 1) || 1,
+          };
+        }
+
+        // fallback: direct object with name/price
+        if (it.name || it.price) {
+          return {
+            name: it.name,
+            price: Number(it.price ?? 0) || 0,
+            quantity: Number(it.quantity ?? it.qty ?? 1) || 1,
+          };
+        }
+
+        return { _raw: it };
+      });
+
+      // fetch missing ids (skip ones already cached)
+      const fetchedById: Record<string, any> = {};
+      const idsToActuallyFetch = idsToFetch.filter(
+        (id) => !inventoryCacheRef.current[id]
+      );
+      if (idsToActuallyFetch.length > 0) {
+        try {
+          const promises = idsToActuallyFetch.map((id) =>
+            apiCall<InventoryItem>(`/api/inventory/${id}`).catch(() => null)
+          );
+          const results = await Promise.all(promises);
+          results.forEach((r, i) => {
+            const id = idsToActuallyFetch[i];
+            if (id) {
+              inventoryCacheRef.current[id] = r || null;
+              if (r) fetchedById[id] = r;
+            }
+          });
+        } catch (err) {
+          console.error("Failed to fetch combo included item details:", err);
+        }
+      }
+
+      // also include any cached items into fetchedById
+      idsToFetch.forEach((id) => {
+        if (!fetchedById[id] && inventoryCacheRef.current[id]) {
+          fetchedById[id] = inventoryCacheRef.current[id];
+        }
+      });
+
+      // build final list
+      const final = entries.map((e: any) => {
+        if (e.name)
+          return { name: e.name, price: e.price, quantity: e.quantity };
+        if (e.id && fetchedById[e.id]) {
+          const item = fetchedById[e.id];
+          return {
+            name: item.name || `Item ${String(item._id).slice(-6)}`,
+            price: Number(item.price ?? 0) || 0,
+            quantity: Number(e.quantity ?? e.qty ?? 1) || 1,
+          };
+        }
+        if (e.id)
+          return {
+            name: `Item ${String(e.id).slice(-6)}`,
+            price: 0,
+            quantity: Number(e.quantity ?? 1) || 1,
+          };
+        if (e._raw && typeof e._raw === "object") {
+          // try to stringify minimal info
+          const asName =
+            e._raw.name ||
+            e._raw.itemName ||
+            (e._raw.itemId && (e._raw.itemId.name || e._raw.itemId._id)) ||
+            String(e._raw);
+          return {
+            name: asName,
+            price: Number(e._raw.price ?? 0) || 0,
+            quantity: Number(e._raw.quantity ?? e._raw.qty ?? 1) || 1,
+          };
+        }
+        return { name: "Unknown item", price: 0, quantity: 1 };
+      });
+
+      if (!cancelled) setComboIncludedItems(final);
+    };
+
+    enrich();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [comboDetails, booking?.comboId, apiCall]);
+
+  // Aggregate combo included items and order items by name (sum quantities)
+  const aggregatedItems = useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; quantity: number; total: number }
+    >();
+
+    // add combo items first (these are part of the package)
+    comboIncludedItems.forEach((it) => {
+      const key = (it.name || "").trim();
+      const existing = map.get(key);
+      const lineTotal = (it.price || 0) * (it.quantity || 1);
+      if (existing) {
+        existing.quantity += it.quantity;
+        existing.total += lineTotal;
+      } else {
+        map.set(key, {
+          name: key || "Gói item",
+          quantity: it.quantity || 1,
+          total: lineTotal,
+        });
+      }
+    });
+
+    // add order items
+    orderItemsFlattened.forEach((it) => {
+      const key = (it.name || "").trim();
+      const existing = map.get(key);
+      const lineTotal = it.subtotal || (it.price || 0) * (it.quantity || 1);
+      if (existing) {
+        existing.quantity += it.quantity;
+        existing.total += lineTotal;
+      } else {
+        map.set(key, {
+          name: key || "Mặt hàng",
+          quantity: it.quantity || 1,
+          total: lineTotal,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [comboIncludedItems, orderItemsFlattened]);
 
   // Calculate subtotal (desk/combo + orders)
   const subtotal = useMemo(() => {
@@ -204,6 +416,59 @@ export default function BillingPage() {
   const finalTotal = useMemo(() => {
     return Math.max(0, subtotal - calculatedDiscount);
   }, [subtotal, calculatedDiscount]);
+
+  // Fetch combo details when booking has a comboId that's not populated
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCombo = async () => {
+      if (!booking?.comboId) {
+        setComboDetails(null);
+        return;
+      }
+
+      // If combo already populated on booking, use it
+      const maybeCombo = booking.comboId as any;
+      if (maybeCombo && (maybeCombo.name || maybeCombo.price)) {
+        setComboDetails(maybeCombo as InventoryItem);
+        return;
+      }
+
+      // Otherwise, try fetch by id — normalize to string to handle ObjectId objects
+      let comboIdStr: string | null = null;
+      if (typeof booking.comboId === "string") {
+        comboIdStr = booking.comboId;
+      } else if (maybeCombo && typeof maybeCombo === "object") {
+        comboIdStr = maybeCombo._id
+          ? String(maybeCombo._id)
+          : String(maybeCombo);
+      }
+      if (!comboIdStr) return;
+
+      try {
+        // check cache first
+        const cached = inventoryCacheRef.current[comboIdStr];
+        if (cached) {
+          if (!cancelled) setComboDetails(cached);
+        } else {
+          const data = await apiCall<InventoryItem>(
+            `/api/inventory/${comboIdStr}`
+          );
+          if (!cancelled) {
+            setComboDetails(data || null);
+            inventoryCacheRef.current[comboIdStr] = data || null;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch combo details:", err);
+        if (!cancelled) setComboDetails(null);
+      }
+    };
+
+    fetchCombo();
+    return () => {
+      cancelled = true;
+    };
+  }, [booking?.comboId]);
 
   // Format date and time
   const formatDateTime = (dateStr: string) => {
@@ -871,14 +1136,45 @@ export default function BillingPage() {
                         {orders.indexOf(order) === 0 && (
                           <div className="flex justify-between items-center text-sm mt-3">
                             <div className="flex-1">
-                              <p className="font-medium">Thuê bàn</p>
-                              <p className="text-gray-500">
-                                {bookingDuration} giờ ×{" "}
-                                {formatCurrency(booking.deskId.hourlyRate)}/giờ
-                              </p>
+                              {/* If combo booking show combo name/duration/price, otherwise show hourly desk info */}
+                              {booking.comboId || booking.isComboBooking ? (
+                                <>
+                                  <p className="font-medium">
+                                    {(comboDetails && comboDetails.name) ||
+                                      (booking.comboId as any)?.name ||
+                                      "Gói combo"}
+                                  </p>
+                                  <p className="text-gray-500">
+                                    {(comboDetails && comboDetails.duration) ||
+                                      (booking.comboId as any)?.duration ||
+                                      0}{" "}
+                                    giờ —{" "}
+                                    {formatCurrency(
+                                      (comboDetails && comboDetails.price) ||
+                                        (booking.comboId as any)?.price ||
+                                        0
+                                    )}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="font-medium">Thuê bàn</p>
+                                  <p className="text-gray-500">
+                                    {bookingDuration} giờ ×{" "}
+                                    {formatCurrency(booking.deskId.hourlyRate)}
+                                    /giờ
+                                  </p>
+                                </>
+                              )}
                             </div>
                             <p className="font-semibold">
-                              {formatCurrency(deskCost)}
+                              {booking.comboId || booking.isComboBooking
+                                ? formatCurrency(
+                                    (comboDetails && comboDetails.price) ||
+                                      (booking.comboId as any)?.price ||
+                                      0
+                                  )
+                                : formatCurrency(deskCost)}
                             </p>
                           </div>
                         )}
@@ -918,12 +1214,48 @@ export default function BillingPage() {
                       <Separator className="my-3" />
 
                       {/* Order Total */}
-                      <div className="flex justify-between items-center font-semibold">
-                        <span>Tổng đơn hàng</span>
-                        <span className="text-lg">
-                          {formatCurrency(order.total)}
-                        </span>
-                      </div>
+                      {/* Order total and combo price (if combo booking) */}
+                      {booking.comboId || booking.isComboBooking ? (
+                        (() => {
+                          const comboPrice =
+                            (comboDetails && comboDetails.price) ||
+                            (booking.comboId as any)?.price ||
+                            0;
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center font-semibold">
+                                <span>Tổng đơn hàng</span>
+                                <span className="text-lg">
+                                  {formatCurrency(order.total)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm text-gray-600">
+                                <span>Gói combo</span>
+                                <span className="font-medium">
+                                  {formatCurrency(
+                                    (comboDetails && comboDetails.price) ||
+                                      (booking.comboId as any)?.price ||
+                                      0
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center font-semibold">
+                                <span>Tổng (đơn + gói)</span>
+                                <span className="text-lg">
+                                  {formatCurrency(order.total + comboPrice)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="flex justify-between items-center font-semibold">
+                          <span>Tổng đơn hàng</span>
+                          <span className="text-lg">
+                            {formatCurrency(order.total)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1023,10 +1355,15 @@ export default function BillingPage() {
                       </span>
                     </div>
                     <p className="text-sm font-medium">
-                      {booking.comboId?.name || "Gói combo"}
+                      {(comboDetails && comboDetails.name) ||
+                        booking.comboId?.name ||
+                        "Gói combo"}
                     </p>
                     <p className="text-xs text-gray-600">
-                      {booking.comboId?.duration || 0} giờ
+                      {(comboDetails && comboDetails.duration) ||
+                        booking.comboId?.duration ||
+                        0}{" "}
+                      giờ
                     </p>
                   </div>
                 )}
@@ -1049,6 +1386,52 @@ export default function BillingPage() {
                     {formatCurrency(ordersTotal)}
                   </span>
                 </div>
+
+                {/* Detailed items: aggregated view of combo+order items (always show if present) */}
+                {(comboIncludedItems.length > 0 ||
+                  orderItemsFlattened.length > 0) && (
+                  <div className="mt-3 bg-white p-2 rounded border">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold mb-2">Gói combo:</h5>
+                      {aggregatedItems.map((it, i) => (
+                        <div
+                          key={`agg-item-${i}`}
+                          className="flex justify-between text-sm"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium">{it.name}</p>
+                            <p className="text-xs text-gray-500">
+                              Số lượng: {it.quantity}
+                            </p>
+                          </div>
+                          <div className="font-medium">
+                            {formatCurrency(it.total)}
+                          </div>
+                        </div>
+                      ))}
+                      <h5 className="text-sm font-semibold my-2">
+                        {" "}
+                        Mặt hàng lẻ:
+                      </h5>
+                      {orderItemsFlattened.map((it, i) => (
+                        <div
+                          key={`agg-item-${i}`}
+                          className="flex justify-between text-sm"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium">{it.name}</p>
+                            <p className="text-xs text-gray-500">
+                              Số lượng: {it.quantity}
+                            </p>
+                          </div>
+                          <div className="font-medium">
+                            {formatCurrency(it.subtotal)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <Separator />
 
@@ -1132,38 +1515,51 @@ export default function BillingPage() {
                     </div>
 
                     {/* Print Bill Button */}
-                    <PrintBill
-                      autoPrint={triggerPrint}
-                      onAfterAutoPrint={() => setTriggerPrint(false)}
-                      booking={{
-                        _id: booking._id,
-                        customer: {
-                          name: booking.customer.name,
-                          phone: booking.customer.phone,
-                          email: booking.customer.email,
-                        },
-                        deskNumber:
-                          parseInt(booking.deskId.label.replace(/\D/g, "")) ||
-                          0,
-                        startTime: booking.startTime,
-                        endTime: booking.endTime,
-                        checkedInAt: booking.checkedInAt,
-                        totalAmount: booking.totalAmount,
-                        paymentStatus: booking.paymentStatus,
-                        status: booking.status,
-                        notes: booking.notes,
-                        comboPackage: booking.comboId
+                    {(() => {
+                      // prepare comboPackage prop for PrintBill
+                      const comboForPrint =
+                        (comboDetails as any) || (booking.comboId as any);
+                      const comboPackageProp =
+                        comboForPrint &&
+                        comboForPrint.price != null &&
+                        comboForPrint.name
                           ? {
-                              name: booking.comboId.name,
-                              duration: booking.comboId.duration,
-                              price: booking.comboId.price,
+                              name: comboForPrint.name,
+                              duration: Number(comboForPrint.duration || 0),
+                              price: Number(comboForPrint.price || 0),
                             }
-                          : undefined,
-                      }}
-                      orders={orders}
-                      deskHourlyRate={booking.deskId.hourlyRate}
-                      className="w-full"
-                    />
+                          : undefined;
+
+                      return (
+                        <PrintBill
+                          autoPrint={triggerPrint}
+                          onAfterAutoPrint={() => setTriggerPrint(false)}
+                          booking={{
+                            _id: booking._id,
+                            customer: {
+                              name: booking.customer.name,
+                              phone: booking.customer.phone,
+                              email: booking.customer.email,
+                            },
+                            deskNumber:
+                              parseInt(
+                                booking.deskId.label.replace(/\D/g, "")
+                              ) || 0,
+                            startTime: booking.startTime,
+                            endTime: booking.endTime,
+                            checkedInAt: booking.checkedInAt,
+                            totalAmount: booking.totalAmount,
+                            paymentStatus: booking.paymentStatus,
+                            status: booking.status,
+                            notes: booking.notes,
+                            comboPackage: comboPackageProp,
+                          }}
+                          orders={orders}
+                          deskHourlyRate={booking.deskId.hourlyRate}
+                          className="w-full"
+                        />
+                      );
+                    })()}
 
                     {!canCheckOut() && (
                       <Button

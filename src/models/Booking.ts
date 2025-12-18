@@ -19,6 +19,9 @@ export interface IBooking extends Document {
   notes?: string;
   checkedInAt?: Date;
   completedAt?: Date;
+  // Combo support
+  comboId?: mongoose.Types.ObjectId | any;
+  isComboBooking?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -86,6 +89,16 @@ const BookingSchema = new Schema<IBooking>(
     notes: {
       type: String,
       trim: true,
+    },
+    // Optional combo reference (for bookings created with a combo package)
+    comboId: {
+      type: Schema.Types.ObjectId,
+      ref: 'InventoryItem',
+      required: false,
+    },
+    isComboBooking: {
+      type: Boolean,
+      default: false,
     },
     checkedInAt: {
       type: Date,

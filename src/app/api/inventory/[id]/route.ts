@@ -134,3 +134,32 @@ async function deleteInventoryItem(request: AuthenticatedRequest, { params }: In
 }
 
 export const DELETE = requireRole(['admin'])(deleteInventoryItem);
+
+// GET /api/inventory/[id] - Get single inventory item
+async function getInventoryItem(request: AuthenticatedRequest, { params }: InventoryParams) {
+  try {
+    await connectDB();
+    const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return ApiResponses.badRequest('Invalid inventory item ID');
+    }
+
+    const item = await InventoryItem.findById(id).lean();
+    if (!item) {
+      return ApiResponses.notFound('Inventory item not found');
+    }
+
+    const itemWithStatus = {
+      ...item,
+      isLowStock: item.quantity <= item.lowStockThreshold
+    };
+
+    return ApiResponses.success(itemWithStatus);
+  } catch (error) {
+    console.error('Get inventory item error:', error);
+    return ApiResponses.serverError(error instanceof Error ? error.message : 'Internal server error', error);
+  }
+}
+
+export const GET = requireRole(['admin', 'staff'])(getInventoryItem);

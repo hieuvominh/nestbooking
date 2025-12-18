@@ -14,7 +14,7 @@ import { formatCurrency } from "@/lib/currency";
  *
  * Features:
  * - Optimized for 58mm thermal paper (≈219px width)
- * - Monospace font for consistent alignment
+ * - Configurable font (monospace recommended for perfect alignment)
  * - Clear sections: Header, Customer Info, Booking Details, Items, Totals
  * - Completely isolated print - no sidebar or UI elements visible
  * - Uses react-to-print for reliable printing across browsers
@@ -60,6 +60,8 @@ interface PrintBillProps {
   showDebugInfo?: boolean; // Optional: show width measurement on bill
   autoPrint?: boolean; // If true, trigger print automatically when component mounts
   onAfterAutoPrint?: () => void; // Callback after automatic print completes
+  charsPerLine?: number; // allow overriding characters per line for specific printers
+  fontFamily?: string; // optional font family for printed bill
 }
 
 export function PrintBill({
@@ -70,6 +72,8 @@ export function PrintBill({
   showDebugInfo = false,
   autoPrint = false,
   onAfterAutoPrint,
+  charsPerLine = 32,
+  fontFamily = "Arial, Calibri, Verdana, sans-serif",
 }: PrintBillProps) {
   const componentRef = useRef<HTMLDivElement>(null);
 
@@ -100,6 +104,8 @@ export function PrintBill({
     const start = new Date(booking.startTime);
     const end = new Date(booking.endTime);
     const hours = Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    // If hours is a whole number, show without decimal (1 instead of 1.0)
+    if (Number.isInteger(hours)) return hours.toString();
     return hours.toFixed(1);
   };
 
@@ -155,12 +161,27 @@ export function PrintBill({
   // currency formatting uses VNĐ via util
 
   // Pad text for alignment (simple left/right padding)
-  // Adjust default chars-per-line for ~58mm (≈23 chars)
-  const padLine = (left: string, right: string, totalWidth: number = 23) => {
-    const leftPart = left.slice(0, totalWidth - right.length);
-    const padding = " s".repeat(
-      Math.max(0, totalWidth - leftPart.length - right.length)
-    );
+  // `charsPerLine` can be overridden for specific printers (e.g., Xprinter 58mm)
+  const padLine = (
+    left: string,
+    right: string,
+    totalWidth: number = charsPerLine
+  ) => {
+    // normalize whitespace
+    left = left.replace(/\s+/g, " ").trim();
+    right = right.replace(/\s+/g, " ").trim();
+
+    // calculate available space for left part
+    const availableForLeft = Math.max(0, totalWidth - right.length - 1);
+
+    let leftPart = left;
+    if (leftPart.length > availableForLeft) {
+      // truncate and indicate with ellipsis
+      leftPart = leftPart.slice(0, Math.max(0, availableForLeft - 1)) + "…";
+    }
+
+    const padLen = Math.max(1, totalWidth - leftPart.length - right.length);
+    const padding = " ".repeat(padLen);
     return leftPart + padding + right;
   };
 
@@ -173,7 +194,10 @@ export function PrintBill({
 
   const deskCost = calculateDeskCost();
   const itemsTotal = calculateItemsTotal();
-  const grandTotal = booking.totalAmount || deskCost + itemsTotal;
+  // Prefer recalculated total from desk + items to reflect current items/discounts
+  // Booking.totalAmount may be an older stored value; use it only as a recorded fallback
+  const recalculatedTotal = deskCost + itemsTotal;
+  const grandTotal = recalculatedTotal;
   const allItems = getAllItems();
   const duration = calculateDuration();
   const currentDateTime = new Date().toLocaleString("vi-VN");
@@ -207,233 +231,101 @@ export function PrintBill({
         <div ref={componentRef}>
           <div
             style={{
-              width: "219px",
+              width: "58mm",
               margin: "0 auto",
-              padding: "10px",
-              fontFamily: "'Courier New', monospace",
-              fontSize: "12px",
-              lineHeight: "1.4",
+              padding: "0px",
+              fontFamily: fontFamily,
+              fontSize: "11px",
+              lineHeight: "1.3",
               color: "#000",
               backgroundColor: "#fff",
             }}
           >
-            {/* Header */}
-            <div style={{ margin: "10px 0" }}>
-              <div
-                style={{
-                  textAlign: "center",
-                  fontWeight: "bold",
-                  fontSize: "14px",
-                }}
-              >
-                BOOKINGCOO
-              </div>
-              <div style={{ textAlign: "center", fontSize: "12px" }}>
-                Hệ Thống Đặt Bàn
-              </div>
-              <div style={{ margin: "2px 0" }}>
-                ================================
-              </div>
-            </div>
+            {/* Compact bill limited to <= 20 lines for 58mm printers */}
+            {(() => {
+              const maxLines = 20;
+              const company = "Nest Learning";
+              const subtitle = "Hóa Đơn Thanh Toán";
+              const separator = "-".repeat(60);
+              const center = (t: string) => {
+                const pad = Math.max(0, Math.floor((50 - t.length) / 2));
+                return " ".repeat(pad) + t;
+              };
 
-            {/* Bill Info */}
-            <div style={{ margin: "8px 0" }}>
-              <div style={{ textAlign: "center", fontWeight: "bold" }}>
-                HÓA ĐƠN THANH TOÁN
-              </div>
-              <div style={{ margin: "2px 0" }}>
-                ================================
-              </div>
-              <div>Mã Đặt Bàn: {booking._id.slice(-8).toUpperCase()}</div>
-              <div>Ngày In: {currentDateTime}</div>
-              <div style={{ margin: "2px 0" }}>
-                --------------------------------
-              </div>
-            </div>
+              const lines: string[] = [];
+              // Header
+              lines.push(center(company));
+              lines.push(center(subtitle));
+              lines.push(separator);
 
-            {/* Customer Info */}
-            <div style={{ margin: "8px 0" }}>
-              <div style={{ fontWeight: "bold" }}>THÔNG TIN KHÁCH HÀNG</div>
-              <div>Tên: {booking.customer.name}</div>
-              {booking.customer.phone && (
-                <div>SĐT: {booking.customer.phone}</div>
-              )}
-              <div style={{ margin: "2px 0" }}>
-                --------------------------------
-              </div>
-            </div>
+              // Booking / customer
+              lines.push(`Mã: ${booking._id.slice(-8).toUpperCase()}`);
+              lines.push(`Ngày: ${currentDateTime}`);
+              lines.push(`Khách: ${booking.customer.name}`);
+              if (booking.customer.phone)
+                lines.push(`SĐT: ${booking.customer.phone}`);
+              lines.push(separator);
 
-            {/* Booking Details */}
-            <div style={{ margin: "8px 0" }}>
-              <div style={{ fontWeight: "bold" }}>THÔNG TIN ĐẶT BÀN</div>
-              <div>Bàn: Bàn {booking.deskNumber}</div>
-              {booking.comboPackage && (
-                <div>Gói: {booking.comboPackage.name}</div>
-              )}
-              <div>Giờ Vào: {formatDateTime(booking.startTime)}</div>
-              <div>Giờ Ra: {formatDateTime(booking.endTime)}</div>
-              <div>Thời Lượng: {duration} giờ</div>
-              {booking.checkedInAt && (
-                <div>Check-in: {formatDateTime(booking.checkedInAt)}</div>
-              )}
-              <div style={{ margin: "2px 0" }}>
-                --------------------------------
-              </div>
-            </div>
-
-            {/* Desk Rental */}
-            <div style={{ margin: "8px 0" }}>
-              <div style={{ fontWeight: "bold" }}>CHI TIẾT THANH TOÁN</div>
-              <div style={{ margin: "2px 0" }}>
-                --------------------------------
-              </div>
-              {booking.comboPackage ? (
-                <div
-                  style={{
-                    whiteSpace: "pre",
-                    fontFamily: "'Courier New', monospace",
-                  }}
-                >
-                  {padLine(
+              // Desk / combo
+              if (booking.comboPackage) {
+                lines.push(
+                  padLine(
                     `Gói: ${booking.comboPackage.name}`,
-                    formatCurrency(booking.comboPackage.price)
-                  )}
-                </div>
-              ) : (
-                <div
+                    formatCurrency(booking.comboPackage.price),
+                    45
+                  )
+                );
+              } else {
+                lines.push(
+                  padLine(
+                    `${duration}x ${formatCurrency(deskHourlyRate)}/h`,
+                    formatCurrency(deskCost),
+                    45
+                  )
+                );
+              }
+
+              const footerReserve = 4;
+              const availableForItems = Math.max(
+                0,
+                maxLines - lines.length - footerReserve
+              );
+              const itemsToShow = allItems.slice(0, availableForItems);
+              itemsToShow.forEach((it) => {
+                lines.push(
+                  padLine(
+                    `${it.quantity}x ${it.name}`,
+                    formatCurrency(it.quantity * it.price),
+                    45
+                  )
+                );
+              });
+              if (allItems.length > itemsToShow.length) {
+                lines.push(
+                  `... và ${allItems.length - itemsToShow.length} mục khác`
+                );
+              }
+
+              // Footer
+              lines.push(padLine("TỔNG CỘNG:", formatCurrency(grandTotal), 45));
+              lines.push(center("Cảm ơn quý khách!")); // Previously showed stored booking.totalAmount for reference when
+              // it differed from the recalculated total. That diagnostic line
+              // was removed to keep the printed bill concise.
+
+              // Ensure we never exceed maxLines
+              const out = lines.slice(0, maxLines).join("\n");
+              return (
+                <pre
                   style={{
                     whiteSpace: "pre",
-                    fontFamily: "'Courier New', monospace",
+                    fontFamily: fontFamily,
+                    margin: 0,
                   }}
                 >
-                  {padLine(
-                    `Thuê Bàn (${duration}h x ${formatCurrency(
-                      deskHourlyRate
-                    )}/h)`,
-                    formatCurrency(deskCost)
-                  )}
-                </div>
-              )}
-              <div style={{ margin: "2px 0" }}>
-                --------------------------------
-              </div>
-            </div>
-
-            {/* Items List */}
-            {allItems.length > 0 && (
-              <div style={{ margin: "8px 0" }}>
-                <div style={{ fontWeight: "bold" }}>MÓN ĐÃ GỌI</div>
-                <div style={{ margin: "2px 0" }}>
-                  --------------------------------
-                </div>
-                {allItems.map((item, index) => {
-                  const itemTotal = item.price * item.quantity;
-                  return (
-                    <div key={index}>
-                      <div>{item.name}</div>
-                      <div
-                        style={{
-                          whiteSpace: "pre",
-                          fontFamily: "'Courier New', monospace",
-                        }}
-                      >
-                        {padLine(
-                          `  ${item.quantity} x ${formatCurrency(item.price)}`,
-                          formatCurrency(itemTotal)
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div style={{ margin: "2px 0" }}>
-                  --------------------------------
-                </div>
-                <div
-                  style={{
-                    whiteSpace: "pre",
-                    fontFamily: "'Courier New', monospace",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {padLine("Tổng Món:", formatCurrency(itemsTotal))}
-                </div>
-                <div style={{ margin: "2px 0" }}>
-                  --------------------------------
-                </div>
-              </div>
-            )}
-
-            {/* Grand Total */}
-            <div style={{ margin: "8px 0" }}>
-              <div
-                style={{
-                  whiteSpace: "pre",
-                  fontFamily: "'Courier New', monospace",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                {padLine("TỔNG CỘNG:", formatCurrency(grandTotal))}
-              </div>
-              <div style={{ margin: "2px 0" }}>
-                ================================
-              </div>
-            </div>
-
-            {/* Payment Status */}
-            <div style={{ margin: "8px 0" }}>
-              <div style={{ textAlign: "center" }}>
-                <div>
-                  Trạng Thái:{" "}
-                  <span style={{ fontWeight: "bold" }}>ĐÃ THANH TOÁN</span>
-                </div>
-                <div style={{ margin: "2px 0" }}>
-                  --------------------------------
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            {booking.notes && (
-              <div style={{ margin: "8px 0" }}>
-                <div style={{ fontWeight: "bold" }}>GHI CHÚ:</div>
-                <div style={{ fontSize: "10px" }}>{booking.notes}</div>
-                <div style={{ margin: "2px 0" }}>
-                  --------------------------------
-                </div>
-              </div>
-            )}
-
-            {/* Footer */}
-            <div style={{ margin: "10px 0" }}>
-              <div style={{ textAlign: "center", fontSize: "12px" }}>
-                Cảm ơn quý khách!
-              </div>
-              <div style={{ textAlign: "center", fontSize: "12px" }}>
-                Hẹn gặp lại!
-              </div>
-              <div style={{ margin: "2px 0" }}>
-                ================================
-              </div>
-            </div>
-
-            {/* Debug Info - Optional width verification */}
-            {showDebugInfo && (
-              <div
-                style={{
-                  margin: "10px 0",
-                  padding: "5px",
-                  fontSize: "8px",
-                  color: "#999",
-                  textAlign: "center",
-                  borderTop: "1px dashed #ccc",
-                }}
-              >
-                <div>📏 Width: 219px (58mm @ 96 DPI)</div>
-                <div>Character width: 23 chars/line</div>
-                <div>Font: Courier New 12px</div>
-              </div>
-            )}
+                  {out}
+                </pre>
+              );
+            })()}
           </div>
         </div>
       </div>

@@ -492,6 +492,10 @@ export default function CreateBookingPage() {
         totalAmount: grandTotal,
         paymentStatus: paymentStatus,
         notes: formData.notes,
+        // include combo selection so server and billing know this is a combo booking
+        ...(selectedCombo
+          ? { comboId: selectedCombo._id, isComboBooking: true }
+          : {}),
       };
 
       const bookingResponse: { booking?: { _id: string }; _id?: string } =

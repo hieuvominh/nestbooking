@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
-import { Booking, Desk, Transaction } from '@/models';
+import { Booking, Desk, Transaction, InventoryItem } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
@@ -101,7 +101,8 @@ async function createBooking(request: AuthenticatedRequest) {
       status,
       paymentStatus,
       totalAmount,
-      checkedInAt
+      checkedInAt,
+      comboId
     } = body;
 
     // Validate required fields
@@ -182,6 +183,12 @@ async function createBooking(request: AuthenticatedRequest) {
       notes
     };
 
+    // Persist combo selection if provided
+    if (comboId) {
+      bookingData.comboId = comboId;
+      bookingData.isComboBooking = true;
+    }
+
     // Add checkedInAt if provided (for immediate check-ins)
     if (checkedInAt) {
       bookingData.checkedInAt = new Date(checkedInAt);
@@ -191,6 +198,26 @@ async function createBooking(request: AuthenticatedRequest) {
     const booking = new Booking(bookingData);
 
     await booking.save();
+
+    // If bookingData included comboId but the currently compiled Booking model
+    // doesn't have that path (hot-reload mismatch), ensure the comboId is
+    // persisted by running an update with strict: false. This writes the raw
+    // field to Mongo so the billing page can read it even before a full
+    // server restart.
+    if (bookingData.comboId) {
+      try {
+        await Booking.findByIdAndUpdate(
+          booking._id,
+          { $set: { comboId: bookingData.comboId, isComboBooking: true } },
+          { strict: false }
+        );
+        // reload booking document
+        await booking.reload?.();
+      } catch (err) {
+        // ignore - we'll still attempt to return whatever was saved
+        console.error('Failed to upsert comboId via fallback update:', err);
+      }
+    }
 
     // Generate public token (expires after booking end + buffer)
     const bufferMinutes = parseInt(process.env.PUBLIC_BOOKING_BUFFER_MINUTES || '30');
@@ -213,13 +240,37 @@ async function createBooking(request: AuthenticatedRequest) {
     });
     await transaction.save();
 
-    // Populate desk info for response
-    await booking.populate('deskId', 'label location');
+    // Try to populate desk and combo info. Some runtimes may have an older
+    // compiled Booking model that doesn't include `comboId` which causes
+    // Mongoose to throw. Handle that gracefully and fallback to manual lookup.
+    let bookingForResponse: any = booking;
+    try {
+      await booking.populate([
+        { path: 'deskId', select: 'label location hourlyRate' },
+        { path: 'comboId', select: 'name price duration' },
+      ]);
+      bookingForResponse = booking;
+    } catch (err) {
+      // If populate fails (eg. comboId not in compiled schema), populate desk
+      // and try a manual lookup for comboId so the client still gets combo info.
+      try {
+        await booking.populate({ path: 'deskId', select: 'label location hourlyRate' });
+      } catch (inner) {
+        // ignore - we'll still return the booking document
+      }
 
-    return ApiResponses.created({
-      booking,
-      publicUrl
-    }, 'Booking created successfully');
+      if (booking.comboId) {
+        try {
+          const combo = await InventoryItem.findById(booking.comboId).select('name price duration').lean();
+          bookingForResponse = booking.toObject ? booking.toObject() : booking;
+          bookingForResponse.comboId = combo;
+        } catch (innerErr) {
+          console.error('Failed to fetch combo fallback:', innerErr);
+        }
+      }
+    }
+
+    return ApiResponses.created({ booking: bookingForResponse, publicUrl }, 'Booking created successfully');
 
   } catch (error) {
     console.error('Create booking error:', error);
