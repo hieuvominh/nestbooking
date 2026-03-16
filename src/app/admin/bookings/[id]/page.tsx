@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
@@ -56,11 +56,12 @@ interface Booking {
   deskNumber: number;
   startTime: string;
   endTime: string;
-  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
+  status: "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
   paymentStatus: "pending" | "paid" | "refunded";
   paymentMethod?: string;
   publicToken?: string;
+  publicShortCode?: string;
   signature?: string;
   notes?: string;
   checkedInAt?: string;
@@ -133,6 +134,8 @@ export default function BookingDetailPage() {
   const [quantity, setQuantity] = useState<number>(1);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
+  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(null);
+  const shortCodeRequestedRef = useRef<string | null>(null);
 
   // Cart state for multiple items
   const [cart, setCart] = useState<
@@ -165,7 +168,7 @@ export default function BookingDetailPage() {
 
   const orders = ordersResponse?.orders || [];
 
-  // Auto-generate token if booking exists and doesn't have a valid token
+  // Auto-generate token if booking exists and doesn't have a valid token or short code
   useEffect(() => {
     const isTokenValid = (token: string) => {
       try {
@@ -178,15 +181,26 @@ export default function BookingDetailPage() {
     };
 
     if (booking && booking.status !== "cancelled") {
+      const hasShortCode = Boolean(shortCodeOverride || booking.publicShortCode);
       const hasValidToken =
+        hasShortCode ||
         (booking.publicToken && isTokenValid(booking.publicToken)) ||
         (booking.signature && isTokenValid(booking.signature));
 
-      if (!hasValidToken) {
+      if ((!hasValidToken || !hasShortCode) && shortCodeRequestedRef.current !== bookingId) {
+        shortCodeRequestedRef.current = bookingId;
         generateNewToken();
       }
     }
-  }, [booking]);
+  }, [
+    booking?._id,
+    booking?.publicShortCode,
+    booking?.publicToken,
+    booking?.signature,
+    booking?.status,
+    shortCodeOverride,
+    bookingId,
+  ]);
 
   const formatDateTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleString();
@@ -194,7 +208,6 @@ export default function BookingDetailPage() {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      pending: "bg-yellow-100 text-yellow-800",
       confirmed: "bg-blue-100 text-blue-800",
       "checked-in": "bg-green-100 text-green-800",
       completed: "bg-gray-100 text-gray-800",
@@ -213,6 +226,10 @@ export default function BookingDetailPage() {
   };
 
   const generatePublicUrl = () => {
+    const code = shortCodeOverride || booking?.publicShortCode;
+    if (code) {
+      return `${window.location.origin}/q/${code}`;
+    }
     if (!booking?.publicToken && !booking?.signature) {
       return "";
     }
@@ -223,29 +240,21 @@ export default function BookingDetailPage() {
 
   const generateNewToken = async () => {
     try {
-      const response = await fetch(
+      const data = await apiCall<{ publicShortCode?: string; publicUrl?: string }>(
         `/api/bookings/${bookingId}/generate-token`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("bookingcoo_token")}`,
-          },
-        }
+        { method: "POST" }
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to generate token");
+      if (data?.publicShortCode) {
+        setShortCodeOverride(data.publicShortCode);
       }
-
-      const data = await response.json();
       toast.success("Public token generated successfully!");
 
       // Update the booking data with the new token
       mutateBooking();
 
-      return data.publicUrl;
+      return data?.publicUrl || "";
     } catch (error) {
+      shortCodeRequestedRef.current = null;
       toast.error("Failed to generate public token");
       return "";
     }
@@ -443,7 +452,9 @@ export default function BookingDetailPage() {
   }
 
   const publicUrl = generatePublicUrl();
-  const hasValidToken = Boolean(booking?.publicToken || booking?.signature);
+  const hasValidToken = Boolean(
+    shortCodeOverride || booking?.publicShortCode || booking?.publicToken || booking?.signature
+  );
 
   return (
     <div className="space-y-6">
@@ -550,7 +561,6 @@ export default function BookingDetailPage() {
                         booking.status
                       )}`}
                     >
-                      <option value="pending">Chờ</option>
                       <option value="confirmed">Đã Xác Nhận</option>
                       <option value="checked-in">Đã Check-in</option>
                       <option value="completed">Hoàn Tất</option>

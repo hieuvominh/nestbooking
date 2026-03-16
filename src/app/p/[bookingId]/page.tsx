@@ -35,7 +35,7 @@ interface Booking {
   };
   startTime: string;
   endTime: string;
-  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
+  status: "confirmed" | "checked-in" | "completed" | "cancelled";
   checkInTime?: string;
   signature?: string;
 }
@@ -72,7 +72,7 @@ interface ExistingOrder {
   bookingId: string;
   items: OrderItem[];
   totalAmount: number;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "confirmed" | "completed" | "cancelled";
   createdAt: string;
   updatedAt: string;
 }

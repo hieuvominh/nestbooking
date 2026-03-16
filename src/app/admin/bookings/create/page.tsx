@@ -122,12 +122,26 @@ export default function CreateBookingPage() {
   // Reveal time-based pricing only after user clicks create
   const [revealTimeCost, setRevealTimeCost] = useState<boolean>(false);
 
-  // Check-in time preview (disabled) — actual check-in time will be set to current time when creating
-  const [startPreview, setStartPreview] = useState<string>(() => {
+  const toLocalDateTimeInput = (date: Date) => {
+    const pad = (num: number) => String(num).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+      date.getDate()
+    )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  const getNowPreview = () => {
     const now = new Date();
     now.setSeconds(0, 0);
-    return now.toISOString().slice(0, 16);
-  });
+    return toLocalDateTimeInput(now);
+  };
+
+  // Check-in time preview (disabled) — refresh when desk selection changes
+  const [startPreview, setStartPreview] = useState<string>(getNowPreview);
+
+  useEffect(() => {
+    if (!formData.deskId) return;
+    setStartPreview(getNowPreview());
+  }, [formData.deskId]);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,7 +151,7 @@ export default function CreateBookingPage() {
   // Payment state
   const [paymentStatus, setPaymentStatus] = useState<
     "pending" | "paid" | "refunded"
-  >("pending");
+  >("paid");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Auto-update end time when combo is selected
@@ -453,7 +467,7 @@ export default function CreateBookingPage() {
       // Compute actual start (check-in) and end times now (start = now)
       const now = new Date();
       now.setSeconds(0, 0);
-      const startIso = now.toISOString().slice(0, 16);
+        const startIso = toLocalDateTimeInput(now);
 
       let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
       if (selectedCombo && selectedCombo.duration) {
@@ -461,7 +475,7 @@ export default function CreateBookingPage() {
           now.getTime() + selectedCombo.duration * 60 * 60 * 1000
         );
       }
-      const endIso = endDate.toISOString().slice(0, 16);
+        const endIso = toLocalDateTimeInput(endDate);
 
       // Basic validation for computed times
       if (endDate.getTime() <= now.getTime()) {
@@ -471,14 +485,19 @@ export default function CreateBookingPage() {
       }
 
       // Persist computed times to formData for UI consistency
-      setFormData((prev) => ({
-        ...prev,
-        startTime: startIso,
-        endTime: endIso,
-      }));
+        setFormData((prev) => ({
+          ...prev,
+          startTime: startIso,
+          endTime: endIso,
+        }));
+        setStartPreview(startIso);
 
-      // Always create booking and redirect to billing page for payment/invoice
-      const bookingData = {
+        // Walk-in flow: payment is required before use, so mark as checked-in + paid.
+        const resolvedStatus = "checked-in";
+        const resolvedPaymentStatus = "paid";
+
+        // Always create booking and redirect to billing page for payment/invoice
+        const bookingData = {
         customer: {
           name: formData.customerName,
           email: formData.customerEmail || undefined,
@@ -487,10 +506,9 @@ export default function CreateBookingPage() {
         deskId: formData.deskId,
         startTime: startIso,
         endTime: endIso,
-        // default to pending; payment will be handled on the billing page
-        status: "pending",
-        totalAmount: grandTotal,
-        paymentStatus: paymentStatus,
+          status: resolvedStatus,
+          totalAmount: grandTotal,
+          paymentStatus: resolvedPaymentStatus,
         notes: formData.notes,
         // include combo selection so server and billing know this is a combo booking
         ...(selectedCombo
@@ -1269,9 +1287,7 @@ export default function CreateBookingPage() {
 
                 {/* Info */}
                 <p className="text-xs text-gray-500 text-center">
-                  {paymentStatus === "paid"
-                    ? "Thanh toán sẽ được đánh dấu hoàn thành"
-                    : "Có thể thanh toán sau"}
+                  Thanh toán sẽ được đánh dấu hoàn thành trước khi sử dụng
                 </p>
               </CardContent>
             </Card>

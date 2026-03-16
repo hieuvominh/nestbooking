@@ -1,11 +1,22 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import { hashPassword } from '../src/lib/auth';
 import { User, Desk, InventoryItem, Booking, Order } from '../src/models';
+
+// Load environment variables from .env.local when running the script
+dotenv.config({ path: '.env.local' });
 
 async function seedDatabase() {
   try {
     // Connect to MongoDB
-    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://hieu:10761521Nana%3A%29@cluster0.5tyjdvr.mongodb.net/bookingcoo?retryWrites=true&w=majority';
+    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://hieu:10761521Nana%3A%29@nestlearning.6gk5jt4.mongodb.net/nestlearning?retryWrites=true&w=majority';
+    // Log a masked version of the URI for debugging (don't print credentials)
+    try {
+      const masked = MONGODB_URI.replace(/:(?:\/\/)?([^@]+)@/, ':***@');
+      console.log('Using MONGODB_URI:', masked);
+    } catch (e) {
+      // ignore
+    }
     await mongoose.connect(MONGODB_URI);
     console.log('Connected to MongoDB');
 
@@ -118,7 +129,9 @@ async function seedDatabase() {
         unit: 'packages',
         type: 'combo',
         duration: 4,
-        includedItems: ['4 hours desk time', 'Coffee or tea', 'Light snack', 'Water bottle']
+        // Schema expects includedItems as array of { item: ObjectId, quantity: number } refs.
+        // Leave empty here or populate with InventoryItem ObjectIds if needed.
+        includedItems: []
       },
       { 
         sku: 'COMBO002', 
@@ -131,7 +144,7 @@ async function seedDatabase() {
         unit: 'packages',
         type: 'combo',
         duration: 8,
-        includedItems: ['8 hours desk time', 'Lunch meal', 'Coffee & tea (unlimited)', 'Snacks', 'Water & juice', 'Priority support']
+        includedItems: []
       },
       { 
         sku: 'COMBO003', 
@@ -144,7 +157,7 @@ async function seedDatabase() {
         unit: 'packages',
         type: 'combo',
         duration: 2,
-        includedItems: ['2 hours desk time', 'Coffee or tea', 'Water']
+        includedItems: []
       },
     ];
 

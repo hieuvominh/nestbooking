@@ -6,6 +6,19 @@ import { Booking } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
+async function ensurePublicShortCode(booking: any) {
+  if (booking.publicShortCode) return;
+  const maxAttempts = 6;
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const exists = await Booking.findOne({ publicShortCode: code }).lean();
+    if (!exists) {
+      booking.publicShortCode = code;
+      return;
+    }
+  }
+}
+
 interface BookingParams {
   params: Promise<{ id: string }>;
 }
@@ -46,11 +59,13 @@ async function generateToken(request: AuthenticatedRequest, { params }: BookingP
     
     // Update the booking with the new token
     booking.publicToken = token;
+    await ensurePublicShortCode(booking);
     await booking.save();
 
     return ApiResponses.success({
       publicToken: token,
       publicUrl: publicUrl,
+      publicShortCode: booking.publicShortCode,
       expiresAt: tokenExpiry,
     }, 'Public token generated successfully');
 

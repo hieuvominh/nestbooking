@@ -12,10 +12,11 @@ export interface IBooking extends Document {
   customer: ICustomerInfo;
   startTime: Date;
   endTime: Date;
-  status: 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
+  status: 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
   totalAmount: number;
   paymentStatus: 'pending' | 'paid' | 'refunded';
   publicToken?: string;
+  publicShortCode?: string;
   notes?: string;
   checkedInAt?: Date;
   completedAt?: Date;
@@ -68,8 +69,8 @@ const BookingSchema = new Schema<IBooking>(
     },
     status: {
       type: String,
-      enum: ['pending', 'confirmed', 'checked-in', 'completed', 'cancelled'],
-      default: 'pending',
+      enum: ['confirmed', 'checked-in', 'completed', 'cancelled'],
+      default: 'confirmed',
     },
     totalAmount: {
       type: Number,
@@ -82,6 +83,11 @@ const BookingSchema = new Schema<IBooking>(
       default: 'pending',
     },
     publicToken: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    publicShortCode: {
       type: String,
       unique: true,
       sparse: true,

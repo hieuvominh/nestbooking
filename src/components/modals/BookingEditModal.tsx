@@ -59,7 +59,6 @@ const bookingSchema = z
 
     // Status
     status: z.enum([
-      "pending",
       "confirmed",
       "checked-in",
       "completed",
@@ -98,7 +97,7 @@ interface Booking {
   deskId: string;
   startTime: string;
   endTime: string;
-  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
+  status: "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
   paymentStatus: "pending" | "paid" | "refunded";
   notes?: string;
@@ -145,7 +144,7 @@ export function BookingEditModal({
       deskId: "",
       startTime: "",
       endTime: "",
-      status: "pending",
+      status: "confirmed",
       paymentMethod: "cash",
       totalAmount: 0,
       paymentStatus: "pending",
@@ -176,7 +175,7 @@ export function BookingEditModal({
         deskId: "",
         startTime: new Date().toISOString().slice(0, 16),
         endTime: new Date(Date.now() + 3600000).toISOString().slice(0, 16), // +1 hour
-        status: "pending",
+        status: "confirmed",
         paymentMethod: "cash",
         totalAmount: 0,
         paymentStatus: "pending",
@@ -380,7 +379,6 @@ export function BookingEditModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="confirmed">Confirmed</SelectItem>
                         <SelectItem value="checked-in">Checked In</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
@@ -516,7 +514,6 @@ export function BookingEditModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="paid">Paid</SelectItem>
                         <SelectItem value="refunded">Refunded</SelectItem>
                       </SelectContent>

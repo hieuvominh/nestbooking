@@ -37,7 +37,7 @@ interface Booking {
   deskNumber: number;
   startTime: string;
   endTime: string;
-  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
+  status: "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
   paymentStatus: "pending" | "paid" | "refunded";
   publicToken?: string;
@@ -167,16 +167,14 @@ export default function BookingsPage() {
 
   const translateStatus = (status: string) => {
     switch (status) {
-      case "pending":
-        return "đang chờ";
       case "confirmed":
-        return "đã xác nhận";
+        return "\u0111\u00e3 x\u00e1c nh\u1eadn";
       case "checked-in":
-        return "đã check-in";
+        return "\u0111\u00e3 check-in";
       case "completed":
-        return "đã hoàn thành";
+        return "\u0111\u00e3 ho\u00e0n th\u00e0nh";
       case "cancelled":
-        return "đã hủy";
+        return "\u0111\u00e3 h\u1ee7y";
       default:
         return status;
     }
@@ -197,8 +195,6 @@ export default function BookingsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending":
-        return "text-yellow-600 bg-yellow-100";
       case "confirmed":
         return "text-blue-600 bg-blue-100";
       case "checked-in":

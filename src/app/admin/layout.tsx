@@ -84,7 +84,7 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
       {/* Desktop Sidebar (hidden on small screens) */}
-      <div className="hidden lg:flex w-64 bg-white shadow-lg border-r border-slate-200/50 flex-col h-screen fixed left-0 top-0">
+      <div className="hidden lg:flex w-64 bg-white shadow-lg border-r border-slate-200/50 flex-col h-screen fixed left-0 top-0 z-50">
         {/* Logo Section */}
         <div className="flex items-center h-16 px-6 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
           <div className="flex items-center space-x-2">

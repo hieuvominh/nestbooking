@@ -50,13 +50,15 @@ interface Booking {
   };
   startTime: string;
   endTime: string;
-  status: "pending" | "confirmed" | "checked-in" | "completed" | "cancelled";
+  status: "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
   paymentStatus: "pending" | "paid" | "refunded";
   notes?: string;
   checkedInAt?: string;
   completedAt?: string;
   createdAt: string;
+  publicToken?: string;
+  publicShortCode?: string;
   // Combo-related fields
   comboId?: {
     _id: string;
@@ -137,6 +139,12 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddingOrder, setIsAddingOrder] = useState(false);
 
+  const [triggerPrint, setTriggerPrint] = useState(false);
+  const prevOrderCountRef = useRef<number | null>(null);
+  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(null);
+  const shortCodeRequestedRef = useRef<string | null>(null);
+  const printPendingRef = useRef(false);
+
   // Fetch booking data
   const {
     data: booking,
@@ -164,6 +172,80 @@ export default function BillingPage() {
   const inventoryCacheRef = useRef<Record<string, InventoryItem | null>>({});
 
   const orders = ordersResponse?.orders || [];
+
+  const publicQrValue = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const code = shortCodeOverride || booking?.publicShortCode;
+    if (code) return `${window.location.origin}/q/${code}`;
+    if (booking?.publicToken) return `${window.location.origin}/p/${bookingId}?t=${booking.publicToken}`;
+    return "";
+  }, [shortCodeOverride, booking?.publicShortCode, booking?.publicToken, bookingId]);
+
+  useEffect(() => {
+    const count = orders.length;
+    if (prevOrderCountRef.current === null) {
+      prevOrderCountRef.current = count;
+      return;
+    }
+    if (count > prevOrderCountRef.current && booking?.paymentStatus === "paid") {
+      printPendingRef.current = true;
+      handleGenerateShortCode(true);
+    }
+    prevOrderCountRef.current = count;
+  }, [orders.length, booking?.paymentStatus]);
+
+  // Ensure a short public code exists for QR printing
+  useEffect(() => {
+    const ensureShortCode = async () => {
+      if (!booking || booking.status === "cancelled") return;
+      if (booking.publicShortCode) return;
+      if (shortCodeOverride) return;
+      if (shortCodeRequestedRef.current === bookingId) return;
+      shortCodeRequestedRef.current = bookingId;
+      try {
+        const data = await apiCall<{ publicShortCode?: string }>(`/api/bookings/${bookingId}/generate-token`, {
+          method: "POST",
+        });
+        if (data?.publicShortCode) {
+          setShortCodeOverride(data.publicShortCode);
+        }
+        mutateBooking();
+      } catch (error) {
+        // ignore - fallback will use long URL if needed
+      }
+    };
+    ensureShortCode();
+  }, [booking?._id, booking?.publicShortCode, booking?.status, shortCodeOverride, apiCall, bookingId, mutateBooking]);
+
+  const handleGenerateShortCode = async (autoPrintAfter = false) => {
+    if (!booking || booking.status === "cancelled") return;
+    try {
+      const data = await apiCall<{ publicShortCode?: string }>(
+        `/api/bookings/${bookingId}/generate-token`,
+        { method: "POST" }
+      );
+      if (data?.publicShortCode) {
+        setShortCodeOverride(data.publicShortCode);
+        if (!autoPrintAfter) {
+          toast.success("Đã tạo mã QR ngắn");
+        }
+        if (autoPrintAfter && printPendingRef.current) {
+          // allow state to flush before printing
+          setTimeout(() => setTriggerPrint(true), 100);
+          printPendingRef.current = false;
+        }
+      } else {
+        if (!autoPrintAfter) {
+          toast.error("Không tạo được mã QR ngắn");
+        }
+      }
+      mutateBooking();
+    } catch (error) {
+      if (!autoPrintAfter) {
+        toast.error("Không tạo được mã QR ngắn");
+      }
+    }
+  };
 
   console.log(comboDetails);
   console.log(booking);
@@ -220,7 +302,7 @@ export default function BillingPage() {
     let cancelled = false;
     const combo = (comboDetails as any) || (booking?.comboId as any);
     if (!combo) {
-      setComboIncludedItems([]);
+      setComboIncludedItems((prev) => (prev.length === 0 ? prev : []));
       return;
     }
 
@@ -231,7 +313,7 @@ export default function BillingPage() {
       combo.comboItems ||
       [];
     if (!Array.isArray(raw) || raw.length === 0) {
-      setComboIncludedItems([]);
+      setComboIncludedItems((prev) => (prev.length === 0 ? prev : []));
       return;
     }
 
@@ -478,7 +560,6 @@ export default function BillingPage() {
   // Get status color classes
   const getBookingStatusColor = (status: string) => {
     const colors = {
-      pending: "bg-yellow-100 text-yellow-800",
       confirmed: "bg-blue-100 text-blue-800",
       "checked-in": "bg-green-100 text-green-800",
       completed: "bg-gray-100 text-gray-800",
@@ -532,13 +613,12 @@ export default function BillingPage() {
   };
 
   // Trigger print when payment completes
-  const [triggerPrint, setTriggerPrint] = useState(false);
 
   // Ensure we trigger print when booking status flips to 'paid' (after mutateBooking finishes)
   useEffect(() => {
     if (booking && booking.paymentStatus === "paid") {
-      // set trigger (no-op if already true)
-      setTriggerPrint(true);
+      printPendingRef.current = true;
+      handleGenerateShortCode(true);
     }
   }, [booking?.paymentStatus]);
 
@@ -1530,6 +1610,7 @@ export default function BillingPage() {
                             }
                           : undefined;
 
+                      const publicUrl = publicQrValue;
                       return (
                         <PrintBill
                           autoPrint={triggerPrint}
@@ -1557,9 +1638,17 @@ export default function BillingPage() {
                           orders={orders}
                           deskHourlyRate={booking.deskId.hourlyRate}
                           className="w-full"
+                          footerInfo={{
+                            storeName: "NEST LEARNING",
+                            address: "123 Đường ABC, Quận X, TP.HCM",
+                            note: "Gọi thêm món: quét mã",
+                            qrValue: publicUrl || undefined,
+                            qrLabel: "Quét mã để gọi thêm món",
+                          }}
                         />
                       );
                     })()}
+
 
                     {!canCheckOut() && (
                       <Button

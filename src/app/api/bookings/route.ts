@@ -5,22 +5,63 @@ import { Booking, Desk, Transaction, InventoryItem } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
+async function ensurePublicShortCode(booking: any) {
+  if (booking.publicShortCode) return;
+  const maxAttempts = 6;
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const exists = await Booking.findOne({ publicShortCode: code }).lean();
+    if (!exists) {
+      booking.publicShortCode = code;
+      return;
+    }
+  }
+}
+
 // GET /api/bookings - Get all bookings
 async function getBookings(request: AuthenticatedRequest) {
   try {
     await connectDB();
 
-    // Auto-complete bookings whose end time has passed.
-    // Any booking that ended in the past and is not already completed or cancelled
-    // will be marked as 'completed'. This keeps the booking statuses up-to-date
-    // without relying on a separate background worker.
+    // Auto-cancel no-show confirmed bookings and auto-complete active bookings.
+    // This keeps the booking statuses up-to-date without relying on a worker.
     try {
+      const now = new Date();
+      const parsedNoShow = parseInt(
+        process.env.BOOKING_NO_SHOW_MINUTES || '30',
+        10
+      );
+      const noShowMinutes = Number.isFinite(parsedNoShow) ? parsedNoShow : 30;
+      const noShowCutoff = new Date(now.getTime() - noShowMinutes * 60 * 1000);
+
+      // Normalize legacy pending bookings into the new 4-status flow.
+      await Booking.updateMany(
+        { status: "pending", endTime: { $lt: now } },
+        { $set: { status: "completed", completedAt: now } }
+      );
+      await Booking.updateMany(
+        { status: "pending", startTime: { $lte: now }, endTime: { $gte: now } },
+        { $set: { status: "checked-in", checkedInAt: now } }
+      );
+      await Booking.updateMany(
+        { status: "pending", startTime: { $gt: now } },
+        { $set: { status: "confirmed" } }
+      );
+
       await Booking.updateMany(
         {
-          endTime: { $lt: new Date() },
-          status: { $nin: ["cancelled", "completed"] },
+          status: "confirmed",
+          startTime: { $lt: noShowCutoff },
         },
-        { $set: { status: "completed" } }
+        { $set: { status: "cancelled" } }
+      );
+
+      await Booking.updateMany(
+        {
+          endTime: { $lt: now },
+          status: "checked-in",
+        },
+        { $set: { status: "completed", completedAt: now } }
       );
     } catch (err) {
       // Non-fatal — if updating statuses fails we still want to return bookings
@@ -171,6 +212,13 @@ async function createBooking(request: AuthenticatedRequest) {
     const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
     const finalTotalAmount = totalAmount || calculatedAmount;
 
+    const resolvedStatus =
+      status || (start <= new Date() ? "checked-in" : "confirmed");
+    const resolvedPaymentStatus =
+      resolvedStatus === "checked-in"
+        ? "paid"
+        : paymentStatus || "pending";
+
     // Create booking with provided or default values
     const bookingData: any = {
       deskId,
@@ -178,8 +226,8 @@ async function createBooking(request: AuthenticatedRequest) {
       startTime: start,
       endTime: end,
       totalAmount: finalTotalAmount,
-      status: status || 'confirmed',
-      paymentStatus: paymentStatus || 'pending',
+      status: resolvedStatus,
+      paymentStatus: resolvedPaymentStatus,
       notes
     };
 
@@ -192,6 +240,8 @@ async function createBooking(request: AuthenticatedRequest) {
     // Add checkedInAt if provided (for immediate check-ins)
     if (checkedInAt) {
       bookingData.checkedInAt = new Date(checkedInAt);
+    } else if (resolvedStatus === "checked-in") {
+      bookingData.checkedInAt = new Date();
     }
 
     // Create booking
@@ -226,6 +276,7 @@ async function createBooking(request: AuthenticatedRequest) {
 
     // Update booking with public token
     booking.publicToken = publicUrl.split('?t=')[1];
+    await ensurePublicShortCode(booking);
     await booking.save();
 
     // Create transaction record

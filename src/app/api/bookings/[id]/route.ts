@@ -6,6 +6,19 @@ import { Booking, Desk, Transaction } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
+async function ensurePublicShortCode(booking: any) {
+  if (booking.publicShortCode) return;
+  const maxAttempts = 6;
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const exists = await Booking.findOne({ publicShortCode: code }).lean();
+    if (!exists) {
+      booking.publicShortCode = code;
+      return;
+    }
+  }
+}
+
 interface BookingParams {
   params: Promise<{ id: string }>;
 }
@@ -18,6 +31,17 @@ async function getBooking(request: AuthenticatedRequest, { params }: BookingPara
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return ApiResponses.badRequest('Invalid booking ID');
+    }
+
+    // Use document here so we can backfill short code if missing
+    const bookingDoc = await Booking.findById(id);
+    if (!bookingDoc) {
+      return ApiResponses.notFound('Booking not found');
+    }
+
+    if (bookingDoc.status !== 'cancelled' && !bookingDoc.publicShortCode) {
+      await ensurePublicShortCode(bookingDoc);
+      await bookingDoc.save();
     }
 
     const booking = await Booking.findById(id)
@@ -62,7 +86,7 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
     }
 
     // Validate status transitions
-    const validStatuses = ['pending', 'confirmed', 'checked-in', 'completed', 'cancelled'];
+    const validStatuses = ['confirmed', 'checked-in', 'completed', 'cancelled'];
     if (status && !validStatuses.includes(status)) {
       return ApiResponses.badRequest('Invalid booking status');
     }
@@ -82,10 +106,6 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
 
       if (newStartTime >= newEndTime) {
         return ApiResponses.badRequest('End time must be after start time');
-      }
-
-      if (newStartTime < new Date() && booking.status === 'pending') {
-        return ApiResponses.badRequest('Booking cannot be in the past');
       }
 
       // Check for conflicts if changing times
@@ -145,6 +165,9 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
     // Handle check-in
     if (status === 'checked-in' && booking.status !== 'checked-in') {
       updateData.checkedInAt = new Date();
+    }
+    if (status === 'completed' && booking.status !== 'completed') {
+      updateData.completedAt = new Date();
     }
 
     // Update public token if times changed

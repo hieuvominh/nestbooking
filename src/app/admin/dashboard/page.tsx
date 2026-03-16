@@ -22,18 +22,24 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const { data: desks, isLoading: desksLoading } = useApi<any[]>("/api/desks", {
-    refreshInterval: 10000, // Poll every 10 seconds
+    refreshInterval: 20000, // Poll every 20 seconds
   });
   const { data: bookings, isLoading: bookingsLoading } = useApi<any>(
     "/api/bookings?limit=100",
     {
-      refreshInterval: 10000, // Poll every 10 seconds
+      refreshInterval: 20000, // Poll every 20 seconds
     }
   );
   const { data: inventory, isLoading: inventoryLoading } = useApi<any[]>(
     "/api/inventory?lowStock=true",
     {
-      refreshInterval: 10000, // Poll every 10 seconds
+      refreshInterval: 20000, // Poll every 20 seconds
+    }
+  );
+  const { data: orders, isLoading: ordersLoading } = useApi<any>(
+    "/api/orders?limit=20",
+    {
+      refreshInterval: 20000, // Poll every 20 seconds
     }
   );
 
@@ -61,7 +67,7 @@ export default function DashboardPage() {
     lowStockItems: inventory?.length || 0,
   };
 
-  if (desksLoading || bookingsLoading || inventoryLoading) {
+  if (desksLoading || bookingsLoading || inventoryLoading || ordersLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-lg">Đang tải bảng điều khiển...</div>
@@ -76,7 +82,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">Bảng điều khiển</h1>
           <RefreshIndicator
             isLoading={desksLoading || bookingsLoading || inventoryLoading}
-            refreshInterval={10000}
+            refreshInterval={20000}
           />
         </div>
         <p className="text-gray-600">
@@ -179,7 +185,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Đặt chỗ gần đây</CardTitle>
@@ -187,7 +193,14 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {bookings?.bookings?.slice(0, 5).map((booking: any) => (
+              {bookings?.bookings
+                ?.filter(
+                  (booking: any) =>
+                    booking.status !== "completed" &&
+                    booking.status !== "cancelled"
+                )
+                .slice(0, 5)
+                .map((booking: any) => (
                 <div
                   key={booking._id}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -196,7 +209,12 @@ export default function DashboardPage() {
                     <p className="font-medium">{booking.customer.name}</p>
                     <p className="text-sm text-gray-600">
                       Bàn {booking.deskId?.label} •{" "}
-                      {new Date(booking.startTime).toLocaleDateString()}
+                      {new Date(booking.startTime).toLocaleDateString()} •{" "}
+                      {new Date(booking.endTime).toLocaleTimeString("vi-VN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      kết thúc
                     </p>
                   </div>
                   <div className="text-right">
@@ -224,7 +242,92 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 </div>
-              )) || <p className="text-gray-500">No recent bookings</p>}
+              )) || (
+                <p className="text-gray-500">Không có đặt chỗ đang hoạt động</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Đơn hàng gần đây</CardTitle>
+            <CardDescription>Món đã gọi mới nhất</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {orders?.orders
+                ?.filter((order: any) =>
+                  ["pending", "confirmed", "preparing", "ready"].includes(
+                    order.status
+                  )
+                )
+                .slice(0, 5)
+                .map((order: any) => (
+                <div
+                  key={order._id}
+                  onClick={() => {
+                    if (order._id) {
+                      window.location.href = `/admin/orders?open=${order._id}`;
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      if (order._id) {
+                        window.location.href = `/admin/orders?open=${order._id}`;
+                      }
+                    }
+                  }}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {order.bookingId?.customer?.name || "Khách"}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Bàn {order.bookingId?.deskId?.label || "—"} •{" "}
+                      {order.items?.length || 0} món
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">
+                      {formatCurrency(order.total || 0)}
+                    </p>
+                    <p
+                      className={`text-sm px-2 py-1 rounded-full ${
+                        order.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : order.status === "confirmed"
+                          ? "bg-blue-100 text-blue-800"
+                          : order.status === "preparing"
+                          ? "bg-orange-100 text-orange-800"
+                          : order.status === "ready"
+                          ? "bg-green-100 text-green-800"
+                          : order.status === "delivered"
+                          ? "bg-gray-100 text-gray-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {order.status === "pending"
+                        ? "đang chờ"
+                        : order.status === "confirmed"
+                        ? "đã xác nhận"
+                        : order.status === "preparing"
+                        ? "đang chuẩn bị"
+                        : order.status === "ready"
+                        ? "sẵn sàng"
+                        : order.status === "delivered"
+                        ? "đã giao"
+                        : "đã hủy"}
+                    </p>
+                  </div>
+                </div>
+              )) || (
+                <p className="text-gray-500">Chưa có đơn hàng đang xử lý</p>
+              )}
             </div>
           </CardContent>
         </Card>
