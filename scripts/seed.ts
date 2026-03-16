@@ -9,7 +9,7 @@ dotenv.config({ path: '.env.local' });
 async function seedDatabase() {
   try {
     // Connect to MongoDB
-    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://hieu:10761521Nana%3A%29@nestlearning.6gk5jt4.mongodb.net/nestlearning?retryWrites=true&w=majority';
+    const MONGODB_URI = process.env.MONGODB_URI;
     // Log a masked version of the URI for debugging (don't print credentials)
     try {
       const masked = MONGODB_URI.replace(/:(?:\/\/)?([^@]+)@/, ':***@');
