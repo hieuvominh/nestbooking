@@ -142,6 +142,10 @@ async function createBooking(request: AuthenticatedRequest) {
       status,
       paymentStatus,
       totalAmount,
+      subtotalAmount,
+      discountPercent,
+      discountAmount,
+      promoCode,
       checkedInAt,
       comboId
     } = body;
@@ -210,7 +214,10 @@ async function createBooking(request: AuthenticatedRequest) {
     // Calculate total amount (use provided value or calculate from desk rate)
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
-    const finalTotalAmount = totalAmount || calculatedAmount;
+    const normalizedTotalAmount =
+      typeof totalAmount === 'number' && totalAmount >= 0
+        ? totalAmount
+        : calculatedAmount;
 
     const resolvedStatus =
       status || (start <= new Date() ? "checked-in" : "confirmed");
@@ -225,7 +232,20 @@ async function createBooking(request: AuthenticatedRequest) {
       customer: cleanCustomer,
       startTime: start,
       endTime: end,
-      totalAmount: finalTotalAmount,
+      totalAmount: normalizedTotalAmount,
+      subtotalAmount:
+        typeof subtotalAmount === 'number' && subtotalAmount >= 0
+          ? subtotalAmount
+          : undefined,
+      discountPercent:
+        typeof discountPercent === 'number' && discountPercent >= 0
+          ? discountPercent
+          : undefined,
+      discountAmount:
+        typeof discountAmount === 'number' && discountAmount >= 0
+          ? discountAmount
+          : undefined,
+      promoCode: promoCode && String(promoCode).trim() ? String(promoCode).trim() : undefined,
       status: resolvedStatus,
       paymentStatus: resolvedPaymentStatus,
       notes
@@ -282,14 +302,16 @@ async function createBooking(request: AuthenticatedRequest) {
     // Create transaction record
     const transaction = new Transaction({
       type: 'income',
-      amount: finalTotalAmount,
+      amount: normalizedTotalAmount,
       source: 'booking',
       description: `Booking for desk ${desk.label} - ${cleanCustomer.name}`,
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId
     });
-    await transaction.save();
+    if (resolvedPaymentStatus === 'paid') {
+      await transaction.save();
+    }
 
     // Try to populate desk and combo info. Some runtimes may have an older
     // compiled Booking model that doesn't include `comboId` which causes

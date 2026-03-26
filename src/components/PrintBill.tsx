@@ -59,6 +59,7 @@ interface PrintBillProps {
   cashGiven?: number;
   changeDue?: number;
   discountPercent?: number;
+  discountAmount?: number;
   vatPercent?: number;
   storeInfo?: {
     name: string;
@@ -96,6 +97,7 @@ export function PrintBill({
   cashGiven,
   changeDue,
   discountPercent = 0,
+  discountAmount = 0,
   vatPercent = 0,
   storeInfo = {
     name: "NEST LEARNING",
@@ -191,7 +193,9 @@ export function PrintBill({
   const itemsTotal = calculateItemsTotal();
   const duration = calculateDuration();
   const subtotal = deskCost + itemsTotal;
-  const discountValue = (subtotal * discountPercent) / 100;
+  const discountValueRaw =
+    discountAmount > 0 ? discountAmount : (subtotal * discountPercent) / 100;
+  const discountValue = Math.min(discountValueRaw, subtotal);
   const vatValue = ((subtotal - discountValue) * vatPercent) / 100;
   const grandTotal = subtotal - discountValue + vatValue;
   const allItems = getAllItems();

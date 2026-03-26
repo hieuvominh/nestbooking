@@ -32,7 +32,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PrintBill } from "@/components/PrintBill";
+import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
 import { formatCurrency } from "@/lib/currency";
+import { isNativePrinterAvailable } from "@/lib/native-printer";
 
 // TypeScript Interfaces
 interface Booking {
@@ -126,6 +128,7 @@ export default function BillingPage() {
   const params = useParams();
   const router = useRouter();
   const bookingId = params.bookingId as string;
+  const hasNativePrinter = isNativePrinterAvailable();
 
   // State for discount/promo
   const [discountPercent, setDiscountPercent] = useState<number>(0);
@@ -187,12 +190,8 @@ export default function BillingPage() {
       prevOrderCountRef.current = count;
       return;
     }
-    if (count > prevOrderCountRef.current && booking?.paymentStatus === "paid") {
-      printPendingRef.current = true;
-      handleGenerateShortCode(true);
-    }
     prevOrderCountRef.current = count;
-  }, [orders.length, booking?.paymentStatus]);
+  }, [orders.length, booking?.paymentStatus, hasNativePrinter]);
 
   // Ensure a short public code exists for QR printing
   useEffect(() => {
@@ -482,10 +481,10 @@ export default function BillingPage() {
     return Array.from(map.values());
   }, [comboIncludedItems, orderItemsFlattened]);
 
-  // Calculate subtotal (desk/combo + orders)
+  // Calculate subtotal (desk/combo only - orders paid separately)
   const subtotal = useMemo(() => {
-    return deskCost + ordersTotal;
-  }, [deskCost, ordersTotal]);
+    return deskCost;
+  }, [deskCost]);
 
   // Calculate discount
   const calculatedDiscount = useMemo(() => {
@@ -498,6 +497,10 @@ export default function BillingPage() {
   const finalTotal = useMemo(() => {
     return Math.max(0, subtotal - calculatedDiscount);
   }, [subtotal, calculatedDiscount]);
+
+  const appliedDiscount = useMemo(() => {
+    return Math.min(calculatedDiscount, subtotal);
+  }, [calculatedDiscount, subtotal]);
 
   // Fetch combo details when booking has a comboId that's not populated
   useEffect(() => {
@@ -599,7 +602,11 @@ export default function BillingPage() {
         method: "PATCH",
         body: {
           paymentStatus: "paid",
-          totalAmount: finalTotal, // Update total if discount was applied
+          totalAmount: finalTotal, // Final total after discount
+          subtotalAmount: subtotal,
+          discountPercent: discountPercent,
+          discountAmount: appliedDiscount,
+          promoCode: promoCode || undefined,
         },
       });
       mutateBooking();
@@ -616,11 +623,11 @@ export default function BillingPage() {
 
   // Ensure we trigger print when booking status flips to 'paid' (after mutateBooking finishes)
   useEffect(() => {
-    if (booking && booking.paymentStatus === "paid") {
+    if (!hasNativePrinter && booking && booking.paymentStatus === "paid") {
       printPendingRef.current = true;
       handleGenerateShortCode(true);
     }
-  }, [booking?.paymentStatus]);
+  }, [booking?.paymentStatus, hasNativePrinter]);
 
   const handleRefund = async () => {
     if (!booking) return;
@@ -670,10 +677,18 @@ export default function BillingPage() {
         completedAt: string;
         totalAmount: number;
         paymentStatus?: string;
+        subtotalAmount?: number;
+        discountPercent?: number;
+        discountAmount?: number;
+        promoCode?: string;
       } = {
         status: "completed",
         completedAt: new Date().toISOString(),
         totalAmount: finalTotal, // Always update with final calculated total
+        subtotalAmount: subtotal,
+        discountPercent: discountPercent,
+        discountAmount: appliedDiscount,
+        promoCode: promoCode || undefined,
       };
 
       // If payment is pending, mark as paid
@@ -1460,7 +1475,7 @@ export default function BillingPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">
-                    Orders {orders.length > 0 && `(${orders.length})`}
+                    Orders {orders.length > 0 && `(${orders.length})`} (thanh toán riêng)
                   </span>
                   <span className="font-medium">
                     {formatCurrency(ordersTotal)}
@@ -1565,8 +1580,10 @@ export default function BillingPage() {
                     onClick={async () => {
                       // mark as paid, then trigger print
                       await handleMarkAsPaid();
-                      // small delay to allow mutateBooking to refresh booking -> PrintBill render
-                      setTimeout(() => setTriggerPrint(true), 300);
+                      if (!hasNativePrinter) {
+                        // small delay to allow mutateBooking to refresh booking -> PrintBill render
+                        setTimeout(() => setTriggerPrint(true), 300);
+                      }
                     }}
                     disabled={isProcessingPayment}
                   >
@@ -1611,41 +1628,100 @@ export default function BillingPage() {
                           : undefined;
 
                       const publicUrl = publicQrValue;
+                      const deskNum =
+                        parseInt(booking.deskId.label.replace(/\D/g, "")) || 0;
+
+                      // Build ReceiptData for Bluetooth printing
+                      const fmtVnd = (n: number) =>
+                        Number(n).toLocaleString("vi-VN") + "d";
+                      const fmtDate = (s: string) =>
+                        new Date(s).toLocaleDateString("vi-VN");
+                      const fmtTime = (s: string) =>
+                        new Date(s).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+
+                      const btItems: { name: string; qty: string; price: string }[] =
+                        [];
+                      if (comboPackageProp) {
+                        btItems.push({
+                          name: `Goi: ${comboPackageProp.name}`,
+                          qty: "1",
+                          price: fmtVnd(comboPackageProp.price),
+                        });
+                      } else {
+                        const dur =
+                          Math.abs(
+                            new Date(booking.endTime).getTime() -
+                              new Date(booking.startTime).getTime()
+                          ) /
+                          (1000 * 60 * 60);
+                        btItems.push({
+                          name: `Ban ${deskNum} (${dur % 1 === 0 ? dur : dur.toFixed(1)}h)`,
+                          qty: "1",
+                          price: fmtVnd(deskCost),
+                        });
+                      }
                       return (
-                        <PrintBill
-                          autoPrint={triggerPrint}
-                          onAfterAutoPrint={() => setTriggerPrint(false)}
-                          booking={{
-                            _id: booking._id,
-                            customer: {
-                              name: booking.customer.name,
-                              phone: booking.customer.phone,
-                              email: booking.customer.email,
-                            },
-                            deskNumber:
-                              parseInt(
-                                booking.deskId.label.replace(/\D/g, "")
-                              ) || 0,
-                            startTime: booking.startTime,
-                            endTime: booking.endTime,
-                            checkedInAt: booking.checkedInAt,
-                            totalAmount: booking.totalAmount,
-                            paymentStatus: booking.paymentStatus,
-                            status: booking.status,
-                            notes: booking.notes,
-                            comboPackage: comboPackageProp,
-                          }}
-                          orders={orders}
-                          deskHourlyRate={booking.deskId.hourlyRate}
-                          className="w-full"
-                          footerInfo={{
-                            storeName: "NEST LEARNING",
-                            address: "123 Đường ABC, Quận X, TP.HCM",
-                            note: "Gọi thêm món: quét mã",
-                            qrValue: publicUrl || undefined,
-                            qrLabel: "Quét mã để gọi thêm món",
-                          }}
-                        />
+                        <>
+                          <PrintBill
+                            autoPrint={hasNativePrinter ? false : triggerPrint}
+                            onAfterAutoPrint={() => setTriggerPrint(false)}
+                            booking={{
+                              _id: booking._id,
+                              customer: {
+                                name: booking.customer.name,
+                                phone: booking.customer.phone,
+                                email: booking.customer.email,
+                              },
+                              deskNumber: deskNum,
+                              startTime: booking.startTime,
+                              endTime: booking.endTime,
+                              checkedInAt: booking.checkedInAt,
+                              totalAmount: booking.totalAmount,
+                              paymentStatus: booking.paymentStatus,
+                              status: booking.status,
+                              notes: booking.notes,
+                              comboPackage: comboPackageProp,
+                            }}
+                            orders={[]}
+                            deskHourlyRate={booking.deskId.hourlyRate}
+                            discountPercent={discountPercent}
+                            discountAmount={appliedDiscount}
+                            className="w-full"
+                            footerInfo={{
+                              storeName: "NEST LEARNING",
+                              address: "123 Đường ABC, Quận X, TP.HCM",
+                              note: "Goi them mon: quet ma",
+                              qrValue: publicUrl || undefined,
+                              qrLabel: "Quet ma de goi them mon",
+                            }}
+                          />
+
+                          {/* Bluetooth Print Button (cho Android) */}
+                          <BluetoothPrintButton
+                            className="w-full"
+                            label="In qua Bluetooth + Mở két"
+                            receiptData={{
+                              storeName: "NEST LEARNING",
+                              storeSubtitle: "Do dung hoc tap - Van phong pham",
+                              storeAddress: "123 Duong ABC, Quan X, TP.HCM",
+                              invoiceNumber: booking._id.slice(-6).toUpperCase(),
+                              orderCode: `#${booking._id.slice(-5).toUpperCase()}`,
+                              cashier: "Thu ngan",
+                              table: `Ban ${deskNum}`,
+                              date: fmtDate(booking.startTime),
+                              timeIn: fmtTime(booking.startTime),
+                              timeOut: fmtTime(booking.endTime),
+                              items: btItems,
+                              subtotal: fmtVnd(subtotal),
+                              total: fmtVnd(finalTotal),
+                              footerNote: "Goi them mon: quet ma QR",
+                              openDrawer: true,
+                            }}
+                          />
+                        </>
                       );
                     })()}
 

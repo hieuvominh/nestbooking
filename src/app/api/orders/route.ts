@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import connectDB from '@/lib/mongodb';
-import { Order } from '@/models';
+import { Order, Transaction } from '@/models';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 // GET /api/orders - Get all orders
@@ -74,6 +74,17 @@ async function createOrder(request: AuthenticatedRequest) {
     });
 
     await order.save();
+
+    // Create transaction record (orders are paid separately)
+    await Transaction.create({
+      type: 'income',
+      amount: total,
+      source: 'order',
+      description: `Order for booking ${bookingId}`,
+      referenceId: order._id,
+      referenceModel: 'Order',
+      createdBy: request.user.userId
+    });
 
     // Populate the order before returning
     await order.populate('bookingId', 'customer deskId startTime endTime');

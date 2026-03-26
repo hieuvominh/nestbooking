@@ -14,6 +14,10 @@ export interface IBooking extends Document {
   endTime: Date;
   status: 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
   totalAmount: number;
+  subtotalAmount?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  promoCode?: string;
   paymentStatus: 'pending' | 'paid' | 'refunded';
   publicToken?: string;
   publicShortCode?: string;
@@ -76,6 +80,26 @@ const BookingSchema = new Schema<IBooking>(
       type: Number,
       required: true,
       min: 0,
+    },
+    subtotalAmount: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    discountPercent: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    discountAmount: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    promoCode: {
+      type: String,
+      trim: true,
+      default: undefined,
     },
     paymentStatus: {
       type: String,

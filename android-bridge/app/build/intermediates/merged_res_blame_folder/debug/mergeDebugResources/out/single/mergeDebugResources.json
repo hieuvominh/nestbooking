@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.bookingcoo.bridge.app-debug-31:/layout_activity_main.xml.flat",
+        "source": "com.bookingcoo.bridge.app-main-33:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.bookingcoo.bridge.app-debug-31:/xml_network_security_config.xml.flat",
+        "source": "com.bookingcoo.bridge.app-main-33:/xml/network_security_config.xml"
+    }
+]

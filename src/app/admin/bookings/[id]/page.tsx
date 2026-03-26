@@ -472,7 +472,7 @@ export default function BookingDetailPage() {
         </div>
         <div className="flex gap-2">
           {/* Print Bill Button - Only visible when payment is completed */}
-          <PrintBill booking={booking} orders={orders} deskHourlyRate={5} />
+          <PrintBill booking={booking} orders={[]} deskHourlyRate={5} />
           <Button
             onClick={() => router.push(`/admin/billing/${bookingId}`)}
             className="bg-green-600 hover:bg-green-700"

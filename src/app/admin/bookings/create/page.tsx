@@ -233,17 +233,16 @@ export default function CreateBookingPage() {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
-  // Calculate grand total
-  // If combo: combo price + add-on items
-  // If no combo: desk cost + add-on items
-  const grandTotal = useMemo(() => {
-    return deskCost + inventoryTotal;
-  }, [deskCost, inventoryTotal]);
+  // Booking total (desk/combo only). Orders are paid separately.
+  const bookingTotal = useMemo(() => {
+    return deskCost;
+  }, [deskCost]);
 
   // For the cart display, optionally hide the time-based desk cost until
   // the user actually creates the booking (controlled by revealTimeCost).
   const displayedDeskCost = revealTimeCost ? deskCost : 0;
   const displayedGrandTotal = displayedDeskCost + inventoryTotal;
+  const displayedBookingTotal = revealTimeCost ? bookingTotal : 0;
 
   // Represent the desk (or selected combo) as a cart-like item so it appears
   // in the right-column cart list. Price uses displayedDeskCost so it will be
@@ -497,7 +496,7 @@ export default function CreateBookingPage() {
         const resolvedPaymentStatus = "paid";
 
         // Always create booking and redirect to billing page for payment/invoice
-        const bookingData = {
+      const bookingData = {
         customer: {
           name: formData.customerName,
           email: formData.customerEmail || undefined,
@@ -506,9 +505,13 @@ export default function CreateBookingPage() {
         deskId: formData.deskId,
         startTime: startIso,
         endTime: endIso,
-          status: resolvedStatus,
-          totalAmount: grandTotal,
-          paymentStatus: resolvedPaymentStatus,
+        status: resolvedStatus,
+        totalAmount: bookingTotal,
+        subtotalAmount: bookingTotal,
+        discountPercent: 0,
+        discountAmount: 0,
+        promoCode: undefined,
+        paymentStatus: resolvedPaymentStatus,
         notes: formData.notes,
         // include combo selection so server and billing know this is a combo booking
         ...(selectedCombo
@@ -1258,7 +1261,9 @@ export default function CreateBookingPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Món ({cart.length})</span>
+                    <span className="text-gray-600">
+                      Món ({cart.length}) (thanh toán riêng)
+                    </span>
                     <span className="font-medium">
                       {formatCurrency(inventoryTotal)}
                     </span>
@@ -1267,10 +1272,16 @@ export default function CreateBookingPage() {
                   <Separator />
 
                   <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
-                    <span className="text-lg font-semibold">Tổng Cộng</span>
-                    <span className="text-2xl font-bold">
-                      {formatCurrency(displayedGrandTotal)}
+                    <span className="text-lg font-semibold">
+                      Tổng thanh toán (bàn)
                     </span>
+                    <span className="text-2xl font-bold">
+                      {formatCurrency(displayedBookingTotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Tổng dự kiến (bàn + món)</span>
+                    <span>{formatCurrency(displayedGrandTotal)}</span>
                   </div>
                 </div>
                 {/* Submit Button */}
@@ -1278,11 +1289,11 @@ export default function CreateBookingPage() {
                   type="submit"
                   className="w-full"
                   size="lg"
-                  disabled={isSubmitting || displayedGrandTotal === 0}
+                  disabled={isSubmitting || displayedBookingTotal === 0}
                 >
                   {isSubmitting
                     ? "Đang tạo đặt bàn..."
-                    : `Tạo Đặt Bàn - ${formatCurrency(displayedGrandTotal)}`}
+                    : `Tạo Đặt Bàn - ${formatCurrency(displayedBookingTotal)}`}
                 </Button>
 
                 {/* Info */}

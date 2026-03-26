@@ -16,6 +16,7 @@ import {
   Users,
   Monitor,
   Package,
+  Printer,
   LogOut,
   Building2,
   Menu,
@@ -43,7 +44,8 @@ export default function AdminLayout({
     // Auto-expand settings if we're on a settings page
     if (
       pathname === "/admin/settings/desks" ||
-      pathname === "/admin/settings/inventory"
+      pathname === "/admin/settings/inventory" ||
+      pathname === "/admin/settings/printer"
     ) {
       setSettingsExpanded(true);
     }
@@ -79,6 +81,7 @@ export default function AdminLayout({
   const settingsNavigation = [
     { name: "Bàn", href: "/admin/settings/desks", icon: Monitor },
     { name: "Kho hàng", href: "/admin/settings/inventory", icon: Package },
+    { name: "Máy in", href: "/admin/settings/printer", icon: Printer },
   ];
 
   return (

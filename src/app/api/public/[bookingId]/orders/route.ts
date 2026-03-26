@@ -146,8 +146,8 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
 
     await order.save();
 
-    // Create transaction record
-    const transaction = new Transaction({
+    // Create transaction record (orders are paid separately)
+    await Transaction.create({
       type: 'income',
       amount: totalAmount,
       source: 'order',
@@ -155,8 +155,6 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       referenceId: order._id,
       referenceModel: 'Order'
     });
-
-    await transaction.save();
 
     // Populate items for response
     await order.populate('items.itemId', 'name price imageUrl');
