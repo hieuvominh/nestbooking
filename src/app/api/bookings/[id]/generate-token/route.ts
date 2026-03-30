@@ -38,9 +38,9 @@ async function generateToken(request: AuthenticatedRequest, { params }: BookingP
       return ApiResponses.notFound('Booking not found');
     }
 
-    // Only generate tokens for valid bookings (not cancelled)
-    if (booking.status === 'cancelled') {
-      return ApiResponses.badRequest('Cannot generate tokens for cancelled bookings');
+    // Only generate tokens for valid bookings (not completed/cancelled)
+    if (booking.status === 'cancelled' || booking.status === 'completed') {
+      return ApiResponses.badRequest('Cannot generate tokens for completed/cancelled bookings');
     }
 
     // Generate token that expires 30 minutes after booking end time or 24 hours from now, whichever is later

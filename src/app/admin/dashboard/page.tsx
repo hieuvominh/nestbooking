@@ -1,6 +1,7 @@
 "use client";
 
 import { useApi } from "@/hooks/useApi";
+import { useEffect, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,6 +11,21 @@ import {
 } from "@/components/ui/card";
 import { RefreshIndicator } from "@/components/ui/refresh-indicator";
 import { formatCurrency } from "@/lib/currency";
+
+function playNewOrderSound() {
+  try {
+    const audio = new Audio("/notification.mp3");
+    audio.volume = 1.0;
+    const promise = audio.play();
+    if (promise !== undefined) {
+      promise.catch((err) => {
+        console.warn("[Sound] Autoplay blocked:", err);
+      });
+    }
+  } catch (err) {
+    console.warn("[Sound] Error:", err);
+  }
+}
 
 interface DashboardStats {
   totalDesks: number;
@@ -21,27 +37,60 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const ordersRef = useRef<any>(null);
+  const [soundEnabled, setSoundEnabled] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem("dashboardSoundEnabled") === "true",
+  );
+
+  const enableSound = () => {
+    playNewOrderSound();
+    setSoundEnabled(true);
+    localStorage.setItem("dashboardSoundEnabled", "true");
+  };
+
   const { data: desks, isLoading: desksLoading } = useApi<any[]>("/api/desks", {
-    refreshInterval: 20000, // Poll every 20 seconds
+    refreshInterval: 20000,
   });
   const { data: bookings, isLoading: bookingsLoading } = useApi<any>(
     "/api/bookings?limit=100",
     {
-      refreshInterval: 20000, // Poll every 20 seconds
-    }
+      refreshInterval: 20000,
+    },
   );
   const { data: inventory, isLoading: inventoryLoading } = useApi<any[]>(
     "/api/inventory?lowStock=true",
     {
-      refreshInterval: 20000, // Poll every 20 seconds
-    }
+      refreshInterval: 20000,
+    },
   );
   const { data: orders, isLoading: ordersLoading } = useApi<any>(
     "/api/orders?limit=20",
     {
-      refreshInterval: 20000, // Poll every 20 seconds
-    }
+      refreshInterval: 20000,
+    },
   );
+
+  // Keep ref in sync with latest orders data
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  // Independent interval — check every 10s regardless of SWR dedup
+  useEffect(() => {
+    // Skip first tick so we don't beep on page load
+    if (!soundEnabled) return;
+    let firstTick = true;
+    const interval = setInterval(() => {
+      if (firstTick) {
+        firstTick = false;
+        return;
+      }
+      playNewOrderSound();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [soundEnabled]);
 
   const stats: DashboardStats = {
     totalDesks: desks?.length || 0,
@@ -54,7 +103,7 @@ export default function DashboardPage() {
       }).length || 0,
     activeBookings:
       bookings?.bookings?.filter(
-        (booking: any) => booking.status === "checked-in"
+        (booking: any) => booking.status === "checked-in",
       ).length || 0,
     todayRevenue:
       bookings?.bookings
@@ -80,13 +129,27 @@ export default function DashboardPage() {
       <div>
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Bảng điều khiển</h1>
-          <RefreshIndicator
-            isLoading={desksLoading || bookingsLoading || inventoryLoading}
-            refreshInterval={20000}
-          />
+          <div className="flex items-center gap-3">
+            {!soundEnabled ? (
+              <button
+                onClick={enableSound}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow transition-colors animate-pulse"
+              >
+                🔔 Bật thông báo âm thanh
+              </button>
+            ) : (
+              <span className="text-xs text-green-600 font-medium">
+                🔔 Âm thanh bật
+              </span>
+            )}
+            <RefreshIndicator
+              isLoading={desksLoading || bookingsLoading || inventoryLoading}
+              refreshInterval={20000}
+            />
+          </div>
         </div>
         <p className="text-gray-600">
-          Chào mừng đến với bảng quản trị BookingCoo
+          Chào mừng đến với bảng quản trị Nest Study Space
         </p>
       </div>
 
@@ -161,7 +224,7 @@ export default function DashboardPage() {
                 ? Math.round(
                     ((stats.totalDesks - stats.availableDesks) /
                       stats.totalDesks) *
-                      100
+                      100,
                   )
                 : 0}
               %
@@ -197,52 +260,52 @@ export default function DashboardPage() {
                 ?.filter(
                   (booking: any) =>
                     booking.status !== "completed" &&
-                    booking.status !== "cancelled"
+                    booking.status !== "cancelled",
                 )
                 .slice(0, 5)
                 .map((booking: any) => (
-                <div
-                  key={booking._id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{booking.customer.name}</p>
-                    <p className="text-sm text-gray-600">
-                      Bàn {booking.deskId?.label} •{" "}
-                      {new Date(booking.startTime).toLocaleDateString()} •{" "}
-                      {new Date(booking.endTime).toLocaleTimeString("vi-VN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
-                      kết thúc
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">
-                      {formatCurrency(booking.totalAmount)}
-                    </p>
-                    <p
-                      className={`text-sm px-2 py-1 rounded-full ${
-                        booking.status === "confirmed"
-                          ? "bg-blue-100 text-blue-800"
+                  <div
+                    key={booking._id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium">{booking.customer.name}</p>
+                      <p className="text-sm text-gray-600">
+                        Bàn {booking.deskId?.label} •{" "}
+                        {new Date(booking.startTime).toLocaleDateString()} •{" "}
+                        {new Date(booking.endTime).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        kết thúc
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">
+                        {formatCurrency(booking.totalAmount)}
+                      </p>
+                      <p
+                        className={`text-sm px-2 py-1 rounded-full ${
+                          booking.status === "confirmed"
+                            ? "bg-blue-100 text-blue-800"
+                            : booking.status === "checked-in"
+                              ? "bg-green-100 text-green-800"
+                              : booking.status === "completed"
+                                ? "bg-gray-100 text-gray-800"
+                                : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {booking.status === "confirmed"
+                          ? "đã xác nhận"
                           : booking.status === "checked-in"
-                          ? "bg-green-100 text-green-800"
-                          : booking.status === "completed"
-                          ? "bg-gray-100 text-gray-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {booking.status === "confirmed"
-                        ? "đã xác nhận"
-                        : booking.status === "checked-in"
-                        ? "đã check-in"
-                        : booking.status === "completed"
-                        ? "đã hoàn thành"
-                        : "đang xử lý"}
-                    </p>
+                            ? "đã check-in"
+                            : booking.status === "completed"
+                              ? "đã hoàn thành"
+                              : "đang xử lý"}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )) || (
+                )) || (
                 <p className="text-gray-500">Không có đặt chỗ đang hoạt động</p>
               )}
             </div>
@@ -257,75 +320,64 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-3">
               {orders?.orders
-                ?.filter((order: any) =>
-                  ["pending", "confirmed", "preparing", "ready"].includes(
-                    order.status
-                  )
+                ?.filter(
+                  (order: any) =>
+                    order.status !== "delivered" &&
+                    order.status !== "cancelled",
                 )
                 .slice(0, 5)
-                .map((order: any) => (
-                <div
-                  key={order._id}
-                  onClick={() => {
-                    if (order._id) {
-                      window.location.href = `/admin/orders?open=${order._id}`;
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      if (order._id) {
-                        window.location.href = `/admin/orders?open=${order._id}`;
-                      }
-                    }
-                  }}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium">
-                      {order.bookingId?.customer?.name || "Khách"}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Bàn {order.bookingId?.deskId?.label || "—"} •{" "}
-                      {order.items?.length || 0} món
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">
-                      {formatCurrency(order.total || 0)}
-                    </p>
-                    <p
-                      className={`text-sm px-2 py-1 rounded-full ${
-                        order.status === "pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : order.status === "confirmed"
-                          ? "bg-blue-100 text-blue-800"
-                          : order.status === "preparing"
-                          ? "bg-orange-100 text-orange-800"
-                          : order.status === "ready"
-                          ? "bg-green-100 text-green-800"
-                          : order.status === "delivered"
-                          ? "bg-gray-100 text-gray-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
+                .map((order: any) => {
+                  const normalizedStatus =
+                    order.status === "delivered" || order.status === "cancelled"
+                      ? order.status
+                      : "pending";
+
+                  const statusLabel = "đang chờ";
+
+                  const statusClass = "bg-yellow-100 text-yellow-800";
+
+                  return (
+                    <div
+                      key={order._id}
+                      onClick={() => {
+                        if (order._id) {
+                          window.location.href = `/admin/orders?open=${order._id}`;
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          if (order._id) {
+                            window.location.href = `/admin/orders?open=${order._id}`;
+                          }
+                        }
+                      }}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                     >
-                      {order.status === "pending"
-                        ? "đang chờ"
-                        : order.status === "confirmed"
-                        ? "đã xác nhận"
-                        : order.status === "preparing"
-                        ? "đang chuẩn bị"
-                        : order.status === "ready"
-                        ? "sẵn sàng"
-                        : order.status === "delivered"
-                        ? "đã giao"
-                        : "đã hủy"}
-                    </p>
-                  </div>
-                </div>
-              )) || (
+                      <div>
+                        <p className="font-medium">
+                          {order.bookingId?.customer?.name || "Khách"}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Bàn {order.bookingId?.deskId?.label || "—"} •{" "}
+                          {order.items?.length || 0} món
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">
+                          {formatCurrency(order.total || 0)}
+                        </p>
+                        <p
+                          className={`text-sm px-2 py-1 rounded-full ${statusClass}`}
+                        >
+                          {statusLabel}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }) || (
                 <p className="text-gray-500">Chưa có đơn hàng đang xử lý</p>
               )}
             </div>
@@ -339,25 +391,30 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {inventory?.map((item: any) => (
-                <div
-                  key={item._id}
-                  className="flex items-center justify-between p-3 bg-red-50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-gray-600">{item.category}</p>
+              {inventory
+                ?.filter(
+                  (item: any) =>
+                    item?.type !== "combo" && item?.category !== "combo",
+                )
+                .map((item: any) => (
+                  <div
+                    key={item._id}
+                    className="flex items-center justify-between p-3 bg-red-50 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-600">{item.category}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-red-600">
+                        {item.quantity} {item.unit}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Min: {item.lowStockThreshold}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-red-600">
-                      {item.quantity} {item.unit}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Min: {item.lowStockThreshold}
-                    </p>
-                  </div>
-                </div>
-              )) || (
+                )) || (
                 <p className="text-gray-500">Tất cả mặt hàng đều đủ tồn kho</p>
               )}
             </div>

@@ -5,9 +5,11 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8 text-center">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">BookingCoo</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Nest Study Space
+          </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Co-working Space Management
+            Quản lý không gian học tập & làm việc
           </p>
         </div>
 

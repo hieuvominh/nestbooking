@@ -1,0 +1,4 @@
+#Mon Mar 30 15:46:15 ICT 2026
+base.0=E\:\\code\\bookingcoo\\android-bridge\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
+path.0=classes.dex
+renamed.0=classes.dex

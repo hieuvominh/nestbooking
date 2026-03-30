@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderEditModal } from "@/components/modals";
 import { formatCurrency } from "@/lib/currency";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
 
 interface Order {
   _id: string;
@@ -68,31 +69,29 @@ interface OrdersResponse {
 }
 
 export default function OrdersPage() {
+  const { user } = useAuth();
   const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>(
     "/api/orders",
     {
-      refreshInterval: 5000, // Poll orders frequently for kitchen updates
-    }
+      refreshInterval: 20000, // Poll orders frequently for kitchen updates
+    },
   );
   const { apiCall } = useApi();
 
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
-
-  const handleEdit = (order: Order) => {
-    setEditingOrder(order);
-  };
-
-  const handleSaveOrder = async (orderData: any) => {
+  const handleCompleteOrder = async (orderId: string): Promise<boolean> => {
     try {
-      await apiCall(`/api/orders/${editingOrder!._id}`, {
+      await apiCall(`/api/orders/${orderId}`, {
         method: "PUT",
-        body: JSON.stringify(orderData),
+        body: { status: "delivered" },
       });
       mutateOrders();
-      setEditingOrder(null);
-    } catch (error) {
-      console.error("Error saving order:", error);
-      throw error;
+      toast.success("Đã hoàn thành đơn hàng!");
+      return true;
+    } catch (error: any) {
+      const msg =
+        error?.message || "Không thể hoàn thành đơn — kiểm tra kho ca";
+      toast.error(msg);
+      return false;
     }
   };
 
@@ -103,8 +102,18 @@ export default function OrdersPage() {
         body: { status: newStatus },
       });
       mutateOrders();
-    } catch (error) {
-      console.error("Error updating order status:", error);
+      if (newStatus === "delivered") {
+        toast.success("Đã giao đơn hàng");
+      } else if (newStatus === "cancelled") {
+        toast.info("Đã hủy đơn hàng");
+      }
+    } catch (error: any) {
+      const msg =
+        error?.message ||
+        error?.data?.message ||
+        "Cập nhật trạng thái thất bại";
+      toast.error(msg);
+      mutateOrders(); // Reset dropdown to current status
     }
   };
 
@@ -128,6 +137,22 @@ export default function OrdersPage() {
         return "text-red-600 bg-red-100";
       default:
         return "text-gray-600 bg-gray-100";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "pending":
+      case "confirmed":
+      case "preparing":
+      case "ready":
+        return "Đang chờ";
+      case "delivered":
+        return "Đã giao";
+      case "cancelled":
+        return "Đã hủy";
+      default:
+        return status;
     }
   };
 
@@ -200,33 +225,65 @@ export default function OrdersPage() {
                     {formatCurrency(order.total)}
                   </TableCell>
                   <TableCell>
-                    <select
-                      value={order.status}
-                      onChange={(e) =>
-                        handleStatusChange(order._id, e.target.value)
-                      }
-                      className={`px-2 py-1 rounded-full text-xs font-medium border-0 ${getStatusColor(
-                        order.status
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                        order.status,
                       )}`}
                     >
-                      <option value="pending">Đang chờ</option>
-                      <option value="confirmed">Đã xác nhận</option>
-                      <option value="preparing">Đang chuẩn bị</option>
-                      <option value="ready">Sẵn sàng</option>
-                      <option value="delivered">Đã giao</option>
-                      <option value="cancelled">Đã hủy</option>
-                    </select>
+                      {getStatusLabel(order.status)}
+                    </span>
                   </TableCell>
                   <TableCell>{formatDateTime(order.orderedAt)}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(order)}
-                      >
-                        Sửa
-                      </Button>
+                      {order.status !== "delivered" &&
+                        order.status !== "cancelled" && (
+                          <BluetoothPrintButton
+                            label="Hoàn thành"
+                            onBeforePrint={() => handleCompleteOrder(order._id)}
+                            receiptData={{
+                              storeName: "Nest Study Space",
+                              invoiceNumber: order._id.slice(-6).toUpperCase(),
+                              orderCode: `#${order._id.slice(-5).toUpperCase()}`,
+                              cashier: user?.name || "Nhân viên",
+                              table:
+                                order.bookingId &&
+                                typeof order.bookingId === "object"
+                                  ? `Khách: ${order.bookingId.customer?.name || "—"}`
+                                  : "—",
+                              date: new Date(
+                                order.orderedAt,
+                              ).toLocaleDateString("vi-VN"),
+                              timeIn: new Date(
+                                order.orderedAt,
+                              ).toLocaleTimeString("vi-VN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }),
+                              timeOut: new Date().toLocaleTimeString("vi-VN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }),
+                              items: order.items.map((item) => ({
+                                name: item.name,
+                                qty: String(item.quantity),
+                                price:
+                                  Number(item.subtotal).toLocaleString(
+                                    "vi-VN",
+                                  ) + "đ",
+                              })),
+                              subtotal:
+                                Number(order.total).toLocaleString("vi-VN") +
+                                "đ",
+                              total:
+                                Number(order.total).toLocaleString("vi-VN") +
+                                "đ",
+                              footerNote: "Phiếu giao hàng",
+                              logoUrl: "/bill-logo.png",
+                              logoWidth: 320,
+                            }}
+                          />
+                        )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -242,14 +299,6 @@ export default function OrdersPage() {
             ))}
         </CardContent>
       </Card>
-
-      {/* Edit Order Modal */}
-      <OrderEditModal
-        isOpen={!!editingOrder}
-        onClose={() => setEditingOrder(null)}
-        order={editingOrder}
-        onSave={handleSaveOrder}
-      />
     </div>
   );
 }

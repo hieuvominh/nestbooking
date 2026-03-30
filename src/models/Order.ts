@@ -13,6 +13,7 @@ export interface IOrder extends Document {
   bookingId: mongoose.Types.ObjectId;
   items: IOrderItem[];
   total: number;
+  isComboOrder?: boolean;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   notes?: string;
   orderedAt: Date;
@@ -71,6 +72,10 @@ const OrderSchema = new Schema<IOrder>(
       required: true,
       min: 0,
     },
+    isComboOrder: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'],
@@ -95,6 +100,7 @@ const OrderSchema = new Schema<IOrder>(
 
 // Create indexes
 OrderSchema.index({ bookingId: 1 });
+OrderSchema.index({ bookingId: 1, isComboOrder: 1 });
 OrderSchema.index({ status: 1 });
 OrderSchema.index({ orderedAt: -1 });
 

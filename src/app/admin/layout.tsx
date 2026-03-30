@@ -16,9 +16,9 @@ import {
   Users,
   Monitor,
   Package,
+  Boxes,
   Printer,
   LogOut,
-  Building2,
   Menu,
   X,
 } from "lucide-react";
@@ -67,21 +67,53 @@ export default function AdminLayout({
     return <>{children}</>;
   }
 
+  const enableDashboardSound = () => {
+    try {
+      const audio = new Audio("/notification.mp3");
+      audio.volume = 1.0;
+      audio.play().catch(() => {});
+    } catch {}
+    localStorage.setItem("dashboardSoundEnabled", "true");
+  };
+
   const navigation = [
     {
       name: "Bảng điều khiển",
       href: "/admin/dashboard",
       icon: LayoutDashboard,
+      onClick: enableDashboardSound,
     },
     { name: "Đặt chỗ", href: "/admin/bookings", icon: Calendar },
     { name: "Đơn hàng", href: "/admin/orders", icon: ShoppingCart },
     { name: "Giao dịch", href: "/admin/transactions", icon: CreditCard },
   ];
 
+  const isAdmin = user?.role === "admin";
+
   const settingsNavigation = [
-    { name: "Bàn", href: "/admin/settings/desks", icon: Monitor },
-    { name: "Kho hàng", href: "/admin/settings/inventory", icon: Package },
-    { name: "Máy in", href: "/admin/settings/printer", icon: Printer },
+    ...(isAdmin
+      ? [
+          { name: "Bàn", href: "/admin/settings/desks", icon: Monitor },
+          {
+            name: "Kho hàng",
+            href: "/admin/settings/inventory",
+            icon: Package,
+          },
+          { name: "Máy in", href: "/admin/settings/printer", icon: Printer },
+          {
+            name: "Kho ca",
+            href: "/admin/settings/shift-inventory",
+            icon: Boxes,
+          },
+        ]
+      : [
+          {
+            name: "Kết ca",
+            href: "/admin/settings/shift-inventory",
+            icon: Boxes,
+          },
+          { name: "Máy in", href: "/admin/settings/printer", icon: Printer },
+        ]),
   ];
 
   return (
@@ -89,11 +121,14 @@ export default function AdminLayout({
       {/* Desktop Sidebar (hidden on small screens) */}
       <div className="hidden lg:flex w-64 bg-white shadow-lg border-r border-slate-200/50 flex-col h-screen fixed left-0 top-0 z-50">
         {/* Logo Section */}
-        <div className="flex items-center h-16 px-6 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
-          <div className="flex items-center space-x-2">
-            <Building2 className="h-8 w-8 text-white" />
-            <h1 className="text-xl font-bold text-white">BookingCoo</h1>
-          </div>
+        <div className="flex items-center justify-center h-16 px-4 border-b border-slate-200/50 flex-shrink-0">
+          <Link
+            href="/admin/bookings/create"
+            className="flex items-center justify-center space-x-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-200 text-white font-bold text-base shadow"
+          >
+            <Calendar className="h-5 w-5" />
+            <span>Tạo Đặt chỗ</span>
+          </Link>
         </div>
 
         {/* Navigation - flex-1 to take up available space */}
@@ -106,6 +141,7 @@ export default function AdminLayout({
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={item.onClick}
                   className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActive
                       ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25"
@@ -230,10 +266,13 @@ export default function AdminLayout({
 
       {/* Mobile top bar with hamburger (visible on small screens) */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white shadow z-40 flex items-center px-4 justify-between">
-        <div className="flex items-center space-x-2">
-          <Building2 className="h-6 w-6 text-blue-600" />
-          <span className="font-semibold">BookingCoo</span>
-        </div>
+        <Link
+          href="/admin/bookings/create"
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-bold text-base shadow transition-colors"
+        >
+          <Calendar className="h-5 w-5" />
+          <span>Tạo Đặt chỗ</span>
+        </Link>
         <button
           aria-label="Open menu"
           className="p-2 rounded-md hover:bg-slate-100"
@@ -251,18 +290,22 @@ export default function AdminLayout({
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-lg border-r border-slate-200/50 flex flex-col">
-            <div className="flex items-center h-16 px-4 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
+            <div className="flex items-center h-16 px-4 border-b border-slate-200/50 flex-shrink-0">
               <div className="flex items-center justify-between w-full">
-                <div className="flex items-center space-x-2">
-                  <Building2 className="h-7 w-7 text-white" />
-                  <h1 className="text-lg font-bold text-white">BookingCoo</h1>
-                </div>
+                <Link
+                  href="/admin/bookings/create"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-200 text-white font-bold text-base shadow"
+                >
+                  <Calendar className="h-5 w-5" />
+                  <span>Tạo Đặt chỗ</span>
+                </Link>
                 <button
                   aria-label="Close menu"
-                  className="p-1 rounded-md hover:bg-white/10 text-white"
+                  className="p-1 rounded-md hover:bg-slate-100 text-slate-600"
                   onClick={() => setMobileOpen(false)}
                 >
-                  <X className="h-5 w-5 text-white" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -276,7 +319,10 @@ export default function AdminLayout({
                     <Link
                       key={item.name}
                       href={item.href}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={() => {
+                        setMobileOpen(false);
+                        item.onClick?.();
+                      }}
                       className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                         isActive
                           ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25"
@@ -404,7 +450,7 @@ export default function AdminLayout({
       )}
 
       {/* Main content - add margin-left to account for fixed sidebar on md+ */}
-      <div className="flex-1 lg:ml-64 overflow-auto">
+      <div className="flex-1 lg:ml-64 overflow-visible">
         {/* padding-top to make room for mobile top bar */}
         <main className="p-8 pt-20 lg:pt-8">
           <div className="max-w-7xl mx-auto">{children}</div>

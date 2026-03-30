@@ -83,7 +83,7 @@ export default function InventoryPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [activeTab, setActiveTab] = useState<"inventory" | "orders">(
-    "inventory"
+    "inventory",
   );
   const [formData, setFormData] = useState<{
     name: string;
@@ -107,13 +107,13 @@ export default function InventoryPage() {
     "/api/inventory",
     {
       refreshInterval: 10000, // Poll every 10 seconds
-    }
+    },
   );
   const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>(
     "/api/orders",
     {
-      refreshInterval: 5000, // Poll orders more frequently (5 seconds) for kitchen updates
-    }
+      refreshInterval: 20000, // Poll orders more frequently (5 seconds) for kitchen updates
+    },
   );
   const { apiCall } = useApi();
 
@@ -163,7 +163,7 @@ export default function InventoryPage() {
 
   const handleOrderStatusUpdate = async (
     orderId: string,
-    status: Order["status"]
+    status: Order["status"],
   ) => {
     try {
       await apiCall(`/api/orders/${orderId}`, {
@@ -477,7 +477,7 @@ export default function InventoryPage() {
                         <div className="flex items-center gap-2">
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(
-                              item.stock
+                              item.stock,
                             )}`}
                           >
                             {item.stock}
@@ -499,7 +499,7 @@ export default function InventoryPage() {
                               onClick={() =>
                                 handleStockUpdate(
                                   item._id,
-                                  Math.max(0, item.stock - 1)
+                                  Math.max(0, item.stock - 1),
                                 )
                               }
                               className="h-6 w-6 p-0"
@@ -597,7 +597,7 @@ export default function InventoryPage() {
                     <TableCell>
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
-                          order.status
+                          order.status,
                         )}`}
                       >
                         {order.status}

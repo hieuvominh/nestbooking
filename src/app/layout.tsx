@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BookingCoo - Co-working Space Management",
-  description: "Manage your co-working space with ease",
+  title: "Nest Study Space",
+  description: "Quản lý không gian học tập & làm việc",
 };
 
 export default function RootLayout({

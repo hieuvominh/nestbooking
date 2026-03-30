@@ -32,14 +32,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const decodeTokenUser = (jwtToken: string): User | null => {
+    try {
+      const parts = jwtToken.split(".");
+      if (parts.length < 2) return null;
+      const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const json = atob(payload);
+      const data = JSON.parse(json) as {
+        userId?: string;
+        email?: string;
+        role?: string;
+        exp?: number;
+      };
+      if (data.exp && Date.now() >= data.exp * 1000) {
+        return null;
+      }
+      if (!data.userId || !data.email || !data.role) return null;
+      return { id: data.userId, email: data.email, name: data.email, role: data.role };
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
     // Check for existing token on mount
     const savedToken = localStorage.getItem("bookingcoo_token");
     const savedUser = localStorage.getItem("bookingcoo_user");
 
-    if (savedToken && savedUser) {
+    if (savedToken) {
       setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {
+          const decoded = decodeTokenUser(savedToken);
+          if (decoded) {
+            setUser(decoded);
+            localStorage.setItem("bookingcoo_user", JSON.stringify(decoded));
+          } else {
+            localStorage.removeItem("bookingcoo_token");
+            localStorage.removeItem("bookingcoo_user");
+            setUser(null);
+            setToken(null);
+          }
+        }
+      } else {
+        const decoded = decodeTokenUser(savedToken);
+        if (decoded) {
+          setUser(decoded);
+          localStorage.setItem("bookingcoo_user", JSON.stringify(decoded));
+        } else {
+          localStorage.removeItem("bookingcoo_token");
+          localStorage.removeItem("bookingcoo_user");
+          setUser(null);
+          setToken(null);
+        }
+      }
     }
 
     setIsLoading(false);

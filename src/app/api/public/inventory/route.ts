@@ -11,10 +11,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
 
-    // Build query for available items
+    // Build query for available items (show all active items, even if out of stock)
     const query: any = {
       isActive: true,
-      quantity: { $gt: 0 }
     };
 
     if (category && category !== 'all') {

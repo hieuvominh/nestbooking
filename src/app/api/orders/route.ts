@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Order, Transaction } from '@/models';
+import { normalizeVndAmount } from '@/lib/currency';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 // GET /api/orders - Get all orders
@@ -61,12 +62,23 @@ async function createOrder(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('Missing required fields: bookingId and items');
     }
 
+    // Shift stock will be deducted when staff marks order as delivered
+    const normalizedItems = items.map((item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const price = normalizeVndAmount(item.price);
+      const subtotal = price * quantity;
+      return { ...item, price, quantity, subtotal };
+    });
+
     // Calculate total
-    const total = items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+    const total = normalizedItems.reduce(
+      (sum: number, item: any) => sum + item.subtotal,
+      0
+    );
 
     const order = new Order({
       bookingId,
-      items,
+      items: normalizedItems,
       total,
       status: 'pending',
       notes,
@@ -80,7 +92,7 @@ async function createOrder(request: AuthenticatedRequest) {
       type: 'income',
       amount: total,
       source: 'order',
-      description: `Order for booking ${bookingId}`,
+      description: `Đơn hàng cho đặt chỗ ${bookingId}`,
       referenceId: order._id,
       referenceModel: 'Order',
       createdBy: request.user.userId

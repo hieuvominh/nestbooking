@@ -12,14 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatCurrency } from "@/lib/currency";
 
 interface Booking {
@@ -71,8 +63,9 @@ interface ExistingOrder {
   _id: string;
   bookingId: string;
   items: OrderItem[];
-  totalAmount: number;
-  status: "confirmed" | "completed" | "cancelled";
+  totalAmount?: number;
+  total?: number;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
   createdAt: string;
   updatedAt: string;
 }
@@ -92,6 +85,36 @@ export default function PublicBookingPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
 
+  const statusLabel = (status: Booking["status"]) => {
+    switch (status) {
+      case "confirmed":
+        return "Đã đặt";
+      case "checked-in":
+        return "Đã check-in";
+      case "completed":
+        return "Hoàn thành";
+      case "cancelled":
+        return "Đã hủy";
+      default:
+        return status;
+    }
+  };
+
+  const orderStatusLabel = (status: ExistingOrder["status"]) => {
+    switch (status) {
+      case "pending":
+        return "Đang chờ";
+      case "confirmed":
+        return "Đang chờ";
+      case "completed":
+        return "Đã giao";
+      case "cancelled":
+        return "Đã hủy";
+      default:
+        return status;
+    }
+  };
+
   useEffect(() => {
     fetchBookingData();
     fetchInventory();
@@ -101,17 +124,19 @@ export default function PublicBookingPage() {
   const fetchBookingData = async () => {
     try {
       if (!token) {
-        throw new Error("Access token required");
+        throw new Error("Cần mã truy cập");
       }
 
       const response = await fetch(`/api/public/${bookingId}?t=${token}`);
       if (!response.ok) {
-        throw new Error("Booking not found or access denied");
+        throw new Error("Không tìm thấy đặt chỗ hoặc không có quyền truy cập");
       }
       const data = await response.json();
       setBooking(data.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load booking");
+      setError(
+        err instanceof Error ? err.message : "Không tải được thông tin đặt chỗ",
+      );
     } finally {
       setLoading(false);
     }
@@ -134,17 +159,17 @@ export default function PublicBookingPage() {
             category: item.category,
             isAvailable: true,
             image: item.imageUrl,
-          }))
+          })),
         );
       } else {
         console.error(
-          "Failed to fetch inventory:",
+          "Khong tai duoc danh sach mon:",
           response.status,
-          response.statusText
+          response.statusText,
         );
       }
     } catch (err) {
-      console.error("Failed to load inventory:", err);
+      console.error("Khong tai duoc danh sach mon:", err);
     }
   };
 
@@ -157,25 +182,30 @@ export default function PublicBookingPage() {
 
       console.log(
         "fetchExistingOrders: Making request with token:",
-        token.substring(0, 20) + "..."
+        token.substring(0, 20) + "...",
       );
       const response = await fetch(
-        `/api/public/${bookingId}/orders?t=${token}`
+        `/api/public/${bookingId}/orders?t=${token}`,
       );
       console.log("fetchExistingOrders: Response status:", response.status);
 
       if (response.ok) {
         const data = await response.json();
+        const list = Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.data?.orders)
+            ? data.data.orders
+            : [];
         console.log(
           "fetchExistingOrders: Success, received orders:",
-          data.data?.length || 0
+          list.length || 0,
         );
-        setExistingOrders(data.data || []);
+        setExistingOrders(list);
       } else {
         console.error(
           "Failed to fetch orders:",
           response.status,
-          response.statusText
+          response.statusText,
         );
         const errorData = await response.text();
         console.error("Error response:", errorData);
@@ -187,7 +217,7 @@ export default function PublicBookingPage() {
 
   const handleCheckIn = async () => {
     if (!signature.trim()) {
-      toast.error("Please provide your signature to check in");
+      toast.error("Vui lòng nhập chữ ký để check-in");
       return;
     }
 
@@ -205,32 +235,27 @@ export default function PublicBookingPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Check-in failed");
+        throw new Error(errorData.message || "Check-in thất bại");
       }
 
       const data = await response.json();
       setBooking(data.data);
-      toast.success("Successfully checked in!");
+      toast.success("Check-in thành công!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Check-in failed");
+      toast.error(err instanceof Error ? err.message : "Check-in thất bại");
     }
   };
 
   const addToCart = (item: InventoryItem) => {
     const existingItem = cart.find((cartItem) => cartItem.itemId === item._id);
     if (existingItem) {
-      if (existingItem.quantity < item.stock) {
-        setCart((prev) =>
-          prev.map((cartItem) =>
-            cartItem.itemId === item._id
-              ? { ...cartItem, quantity: cartItem.quantity + 1 }
-              : cartItem
-          )
-        );
-        toast.success(`Added another ${item.name} to cart`);
-      } else {
-        toast.error("Not enough stock available");
-      }
+      setCart((prev) =>
+        prev.map((cartItem) =>
+          cartItem.itemId === item._id
+            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            : cartItem,
+        ),
+      );
     } else {
       setCart((prev) => [
         ...prev,
@@ -241,7 +266,6 @@ export default function PublicBookingPage() {
           price: item.price,
         },
       ]);
-      toast.success(`${item.name} added to cart`);
     }
   };
 
@@ -249,7 +273,7 @@ export default function PublicBookingPage() {
     const item = cart.find((cartItem) => cartItem.itemId === itemId);
     setCart((prev) => prev.filter((item) => item.itemId !== itemId));
     if (item) {
-      toast.success(`${item.itemName} removed from cart`);
+      toast.success(`Đã xóa ${item.itemName} khỏi giỏ`);
     }
   };
 
@@ -259,29 +283,41 @@ export default function PublicBookingPage() {
       return;
     }
 
-    const inventoryItem = inventory.find((item) => item._id === itemId);
-    if (inventoryItem && quantity > inventoryItem.stock) {
-      toast.error(
-        `Only ${inventoryItem.stock} ${inventoryItem.name}(s) available`
-      );
-      return;
-    }
-
     setCart((prev) =>
       prev.map((item) =>
-        item.itemId === itemId ? { ...item, quantity } : item
-      )
+        item.itemId === itemId ? { ...item, quantity } : item,
+      ),
     );
+  };
+  const cancelOrder = async (orderId: string) => {
+    try {
+      if (!token) return;
+      const response = await fetch(
+        `/api/public/${bookingId}/orders/${orderId}?t=${token}`,
+        {
+          method: "PATCH",
+        },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Không hủy được đơn");
+      }
+      toast.success("Đã hủy đơn");
+      fetchExistingOrders();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Không hủy được đơn";
+      toast.error(message);
+    }
   };
 
   const submitOrder = async () => {
     if (cart.length === 0) {
-      toast.error("Your cart is empty");
+      toast.error("Giỏ hàng đang trống");
       return;
     }
 
     if (!token) {
-      toast.error("Authentication required");
+      toast.error("Cần xác thực");
       return;
     }
 
@@ -303,25 +339,25 @@ export default function PublicBookingPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to submit order");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || errorData.message || "Gửi đơn thất bại",
+        );
       }
 
       const data = await response.json();
       setCart([]);
       fetchExistingOrders(); // Refresh orders list
-      toast.success("Order placed successfully!");
+      toast.success("Đã gửi đơn thành công!");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to submit order"
-      );
+      toast.error(err instanceof Error ? err.message : "Gửi đơn thất bại");
     } finally {
       setOrderLoading(false);
     }
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return new Date(dateString).toLocaleString("vi-VN");
   };
 
   const getCartTotal = () => {
@@ -330,441 +366,420 @@ export default function PublicBookingPage() {
 
   const getOrdersTotal = () => {
     return existingOrders.reduce(
-      (total: number, order: ExistingOrder) => total + (order.totalAmount || 0),
-      0
+      (total: number, order: ExistingOrder) =>
+        total + (order.totalAmount ?? order.total ?? 0),
+      0,
     );
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
-          <p className="mt-4 text-gray-600">Loading your booking...</p>
+        <div className="text-left">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          <p className="mt-4 text-gray-600">Đang tải thông tin đặt chỗ...</p>
         </div>
       </div>
     );
   }
 
-  if (error || !booking) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle className="text-red-600">Access Denied</CardTitle>
+            <CardTitle className="text-red-600">
+              Không có quyền truy cập
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600">{error || "Booking not found"}</p>
+            <p className="text-gray-600">{error}</p>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-sm text-gray-500">Không tìm thấy đặt chỗ</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">BookingCoo</h1>
-          <p className="text-gray-600">Your Co-working Space Booking</p>
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="mx-auto w-full max-w-md px-4 py-4 space-y-4">
+        <div className="text-left">
+          <h1 className="text-2xl font-bold text-gray-900">Nest Study Space</h1>
+          <p className="text-gray-600">Gọi món nhanh</p>
         </div>
 
-        {/* Booking Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Booking Details</CardTitle>
-            <CardDescription>Your reservation information</CardDescription>
+            <CardTitle className="text-base">Thông tin đặt chỗ</CardTitle>
+            <CardDescription className="text-[11px]">
+              Chi tiết đặt chỗ
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-2 gap-3 items-start">
               <div>
-                <label className="text-sm font-medium text-gray-600">
-                  Customer Name
-                </label>
-                <p className="text-lg font-semibold">{booking.customer.name}</p>
+                <p className="text-[11px] text-gray-500">Khách hàng</p>
+                <p className="text-sm font-medium">{booking.customer.name}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">
-                  Email
-                </label>
-                <p className="text-lg">{booking.customer.email}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">
-                  Desk
-                </label>
-                <p className="text-lg font-semibold">{booking.desk.label}</p>
+                <p className="text-[11px] text-gray-500">Bàn</p>
+                <p className="text-sm font-medium">{booking.desk.label}</p>
                 {booking.desk.location && (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-[11px] text-gray-500">
                     {booking.desk.location}
                   </p>
                 )}
               </div>
+            </div>
+            {booking.customer.email && (
               <div>
-                <label className="text-sm font-medium text-gray-600">
-                  Status
-                </label>
+                <p className="text-[11px] text-gray-500">Email</p>
+                <p className="text-[11px]">{booking.customer.email}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 items-start">
+              <div>
+                <p className="text-[11px] text-gray-500">Trạng thái</p>
                 <span
-                  className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                  className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
                     booking.status === "confirmed"
                       ? "bg-blue-100 text-blue-600"
                       : booking.status === "checked-in"
-                      ? "bg-green-100 text-green-600"
-                      : booking.status === "completed"
-                      ? "bg-gray-100 text-gray-600"
-                      : "bg-yellow-100 text-yellow-600"
+                        ? "bg-green-100 text-green-600"
+                        : booking.status === "completed"
+                          ? "bg-gray-100 text-gray-600"
+                          : "bg-yellow-100 text-yellow-600"
                   }`}
                 >
-                  {booking.status}
+                  {statusLabel(booking.status)}
                 </span>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">
-                  Time Range
-                </label>
-                <p className="text-lg">
-                  {formatDateTime(booking.startTime)} →{" "}
-                  {formatDateTime(booking.endTime)}
+                <p className="text-[11px] text-gray-500">Thời gian</p>
+                <p className="text-[11px]">
+                  {formatDateTime(booking.startTime)}
                 </p>
+                <p className="text-[11px]">{formatDateTime(booking.endTime)}</p>
               </div>
             </div>
 
             {booking.checkInTime && (
-              <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                <p className="text-green-800">
-                  ✅ Checked in at: {formatDateTime(booking.checkInTime)}
-                </p>
+              <div className="mt-2 rounded-md bg-green-50 p-2 text-xs text-green-800">
+                Đã check-in lúc: {formatDateTime(booking.checkInTime)}
                 {booking.signature && (
-                  <p className="text-sm text-green-600 mt-1">
-                    Signature: {booking.signature}
-                  </p>
+                  <div className="text-[11px] text-green-700 mt-1">
+                    Chữ ký: {booking.signature}
+                  </div>
                 )}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Check-in Section */}
         {booking.status === "confirmed" && !booking.checkInTime && (
           <Card>
             <CardHeader>
-              <CardTitle>Check In</CardTitle>
+              <CardTitle>Check-in</CardTitle>
               <CardDescription>
-                Please provide your signature to check in
+                Vui lòng nhập chữ ký để check-in
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2">
               <div>
                 <label
                   htmlFor="signature"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Your Signature
+                  Chữ ký
                 </label>
                 <Input
                   id="signature"
                   value={signature}
                   onChange={(e) => setSignature(e.target.value)}
-                  placeholder="Enter your full name as signature"
+                  placeholder="Nhập họ tên làm chữ ký"
                   required
                 />
               </div>
               <Button onClick={handleCheckIn} className="w-full">
-                Check In
+                Check-in
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Food Ordering Section */}
         {(booking.status === "confirmed" ||
           booking.status === "checked-in") && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Food & Items</CardTitle>
-                <CardDescription>
-                  Browse our menu and place your order
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {inventory.map((item) => {
-                    const cartItem = cart.find(
-                      (cartItem) => cartItem.itemId === item._id
-                    );
-                    const cartQuantity = cartItem ? cartItem.quantity : 0;
-                    const maxQuantity = item.stock - cartQuantity;
+          <Card>
+            <CardHeader>
+              <CardTitle>Gọi món</CardTitle>
+              <CardDescription>Chọn món và gửi yêu cầu</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {inventory.map((item) => {
+                  const cartItem = cart.find(
+                    (cartItem) => cartItem.itemId === item._id,
+                  );
+                  const cartQuantity = cartItem ? cartItem.quantity : 0;
 
-                    return (
-                      <div
-                        key={item._id}
-                        className="border rounded-lg p-4 space-y-3 bg-white hover:shadow-md transition-shadow"
-                      >
-                        {item.image && (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-32 object-cover rounded"
-                          />
-                        )}
-                        <div>
-                          <h3 className="font-semibold text-lg">{item.name}</h3>
-                          <p className="text-sm text-gray-600">
+                  return (
+                    <div
+                      key={item._id}
+                      className="rounded-lg border bg-white p-3"
+                    >
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-24 w-full rounded object-cover"
+                        />
+                      )}
+                      <div className="mt-2">
+                        <p className="text-sm font-medium">{item.name}</p>
+                        {item.description && (
+                          <p className="text-xs text-gray-500 line-clamp-2">
                             {item.description}
                           </p>
-                          <div className="flex items-center justify-start mt-2">
-                            <span className="text-sm text-gray-500 capitalize bg-gray-100 px-2 py-1 rounded">
-                              {item.category}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xl font-bold text-green-600">
-                            {formatCurrency(item.price)}
-                          </span>
-                          {cartQuantity > 0 && (
-                            <span className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded">
-                              {cartQuantity} in cart
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => addToCart(item)}
-                            className="flex-1"
-                            disabled={maxQuantity === 0}
-                            variant={
-                              maxQuantity === 0 ? "secondary" : "default"
-                            }
-                          >
-                            {maxQuantity === 0 ? "Out of Stock" : "Add to Cart"}
-                          </Button>
-                          {cartQuantity > 0 && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  updateCartQuantity(item._id, cartQuantity - 1)
-                                }
-                                className="h-9 w-9 p-0"
-                              >
-                                -
-                              </Button>
-                              <span className="w-8 text-center text-sm">
-                                {cartQuantity}
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  updateCartQuantity(item._id, cartQuantity + 1)
-                                }
-                                className="h-9 w-9 p-0"
-                                disabled={maxQuantity === 0}
-                              >
-                                +
-                              </Button>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-
-                {inventory.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 text-lg">
-                      No items available for ordering at the moment.
-                    </p>
-                    <p className="text-gray-400 text-sm mt-2">
-                      Please check back later or contact staff for assistance.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Shopping Cart */}
-            {cart.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Your Order</CardTitle>
-                  <CardDescription>
-                    Review your items before placing order
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cart.map((item) => (
-                        <TableRow key={item.itemId}>
-                          <TableCell>{item.itemName}</TableCell>
-                          <TableCell>{formatCurrency(item.price)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  updateCartQuantity(
-                                    item.itemId,
-                                    item.quantity - 1
-                                  )
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                -
-                              </Button>
-                              <span className="w-8 text-center">
-                                {item.quantity}
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  updateCartQuantity(
-                                    item.itemId,
-                                    item.quantity + 1
-                                  )
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                +
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(item.price * item.quantity)}
-                          </TableCell>
-                          <TableCell>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-green-600">
+                          {formatCurrency(item.price)}
+                        </span>
+                        {cartQuantity > 0 && (
+                          <span className="text-[11px] text-blue-600">
+                            {cartQuantity} trong giỏ
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-col gap-2">
+                        <Button
+                          onClick={() => addToCart(item)}
+                          className="w-full"
+                          size="sm"
+                        >
+                          Thêm
+                        </Button>
+                        {cartQuantity > 0 && (
+                          <div className="flex items-center justify-between rounded-md border px-2 py-1">
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => removeFromCart(item.itemId)}
-                              className="text-red-600 hover:bg-red-50"
+                              variant="ghost"
+                              onClick={() =>
+                                updateCartQuantity(item._id, cartQuantity - 1)
+                              }
+                              className="h-7 w-7 p-0"
                             >
-                              Remove
+                              -
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div className="mt-4 flex justify-between items-center">
-                    <span className="text-lg font-semibold">
-                      Total: {formatCurrency(getCartTotal())}
-                    </span>
-                    <Button
-                      onClick={submitOrder}
-                      disabled={orderLoading}
-                      className="min-w-32"
-                    >
-                      {orderLoading ? "Placing Order..." : "Place Order"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </>
+                            <span className="text-sm font-medium">
+                              {cartQuantity}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                updateCartQuantity(item._id, cartQuantity + 1)
+                              }
+                              className="h-7 w-7 p-0"
+                            >
+                              +
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {inventory.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Hiện chưa có món để gọi.</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Vui lòng quay lại sau hoặc liên hệ nhân viên.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
-        {/* Previous Orders */}
+        {cart.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Giỏ món</CardTitle>
+              <CardDescription>Xem lại trước khi gửi</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {cart.map((item) => (
+                  <div
+                    key={item.itemId}
+                    className="rounded-lg border bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="font-medium">{item.itemName}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatCurrency(item.price)} x {item.quantity}
+                        </p>
+                      </div>
+                      <div className="text-right font-semibold">
+                        {formatCurrency(item.price * item.quantity)}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            updateCartQuantity(item.itemId, item.quantity - 1)
+                          }
+                          className="h-8 w-8 p-0"
+                        >
+                          -
+                        </Button>
+                        <span className="w-8 text-center text-sm">
+                          {item.quantity}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            updateCartQuantity(item.itemId, item.quantity + 1)
+                          }
+                          className="h-8 w-8 p-0"
+                        >
+                          +
+                        </Button>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeFromCart(item.itemId)}
+                        className="text-red-600 hover:bg-red-50"
+                      >
+                        Xóa
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {existingOrders.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Your Orders</CardTitle>
-              <CardDescription>Previously placed orders</CardDescription>
+              <CardTitle>Đơn đã gọi</CardTitle>
+              <CardDescription>Các đơn đã gửi</CardDescription>
             </CardHeader>
             <CardContent>
-              {existingOrders.map((order) => (
-                <div key={order._id} className="mb-6 p-4 border rounded-lg">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-semibold">
-                      Order #{order._id.slice(-8)}
-                    </h4>
-                    <div className="flex items-center gap-3">
+              <div className="space-y-4">
+                {existingOrders.map((order) => (
+                  <div
+                    key={order._id}
+                    className="rounded-lg border bg-white p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold">
+                        Đơn #{order._id.slice(-8)}
+                      </h4>
                       <span
-                        className={`px-2 py-1 rounded text-sm ${
+                        className={`px-2 py-1 rounded text-xs ${
                           order.status === "confirmed"
                             ? "bg-blue-100 text-blue-600"
                             : order.status === "completed"
-                            ? "bg-green-100 text-green-600"
-                            : order.status === "cancelled"
-                            ? "bg-red-100 text-red-600"
-                            : "bg-yellow-100 text-yellow-600"
+                              ? "bg-green-100 text-green-600"
+                              : order.status === "cancelled"
+                                ? "bg-red-100 text-red-600"
+                                : "bg-yellow-100 text-yellow-600"
                         }`}
                       >
-                        {order.status}
-                      </span>
-                      <span className="font-semibold">
-                        {formatCurrency(order.totalAmount || 0)}
+                        {orderStatusLabel(order.status)}
                       </span>
                     </div>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                    <div className="mt-2 space-y-1">
                       {order.items?.map((item) => (
-                        <TableRow key={item._id}>
-                          <TableCell>
-                            {item.name || item.itemName || "Unknown Item"}
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(item.price || 0)}
-                          </TableCell>
-                          <TableCell>{item.quantity || 0}</TableCell>
-                          <TableCell>
+                        <div
+                          key={item._id}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span>
+                            {item.name || item.itemName || "Món"} x{" "}
+                            {item.quantity || 0}
+                          </span>
+                          <span>
                             {formatCurrency(
-                              (item.price || 0) * (item.quantity || 0)
+                              (item.price || 0) * (item.quantity || 0),
                             )}
-                          </TableCell>
-                        </TableRow>
-                      )) || (
-                        <TableRow>
-                          <TableCell
-                            colSpan={4}
-                            className="text-center text-gray-500"
-                          >
-                            No items found in this order
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Ordered on {formatDateTime(order.createdAt)}
-                  </p>
-                </div>
-              ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <span className="text-gray-500">
+                        Gửi lúc {formatDateTime(order.createdAt)}
+                      </span>
+                      <span className="font-semibold">
+                        {formatCurrency(order.totalAmount ?? order.total ?? 0)}
+                      </span>
+                    </div>
+                    {order.status === "pending" && (
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => cancelOrder(order._id)}
+                        >
+                          Hủy đơn
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
               <div className="mt-4 text-right">
-                <span className="text-lg font-semibold">
-                  Total Spent: {formatCurrency(getOrdersTotal())}
+                <span className="text-base font-semibold">
+                  Tổng đã gọi: {formatCurrency(getOrdersTotal())}
                 </span>
               </div>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-white">
+          <div className="mx-auto w-full max-w-md px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-500">Tạm tính</p>
+              <p className="text-base font-semibold">
+                {formatCurrency(getCartTotal())}
+              </p>
+            </div>
+            <Button
+              onClick={submitOrder}
+              disabled={orderLoading}
+              className="min-w-28"
+            >
+              {orderLoading ? "Đang gửi..." : "Gửi đơn"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

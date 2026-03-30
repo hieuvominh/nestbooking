@@ -4,6 +4,7 @@ import connectDB from '@/lib/mongodb';
 import { Booking, InventoryItem, Order, Transaction } from '@/models';
 import { validatePublicBookingAccess } from '@/lib/jwt';
 import { ApiResponses } from '@/lib/api-middleware';
+import { normalizeVndAmount } from '@/lib/currency';
 
 interface OrderParams {
   params: Promise<{ bookingId: string }>;
@@ -29,6 +30,14 @@ export async function GET(request: NextRequest, { params }: OrderParams) {
     // Validate token and booking access
     if (!validatePublicBookingAccess(bookingId, token)) {
       return ApiResponses.unauthorized('Invalid or expired access token');
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return ApiResponses.notFound('Booking not found');
+    }
+    if (booking.status === 'cancelled' || booking.status === 'completed') {
+      return ApiResponses.unauthorized('Booking has ended');
     }
 
     const orders = await Order.find({ bookingId })
@@ -80,6 +89,10 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.notFound('Booking not found');
     }
 
+    if (booking.status === 'cancelled' || booking.status === 'completed') {
+      return ApiResponses.unauthorized('Booking has ended');
+    }
+
     if (booking.status !== 'checked-in') {
       return ApiResponses.badRequest('Must be checked in to place orders');
     }
@@ -111,16 +124,13 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
         return ApiResponses.badRequest(`Item is not available: ${inventoryItem.name}`);
       }
 
-      if (inventoryItem.quantity < quantity) {
-        return ApiResponses.badRequest(`Insufficient stock for ${inventoryItem.name}. Available: ${inventoryItem.quantity}`);
-      }
-
-      // Add to order items
-      const subtotal = inventoryItem.price * quantity;
+      // Add to order items (no stock check — staff will verify when delivering)
+      const normalizedPrice = normalizeVndAmount(inventoryItem.price);
+      const subtotal = normalizedPrice * quantity;
       orderItems.push({
         itemId: inventoryItem._id,
         name: inventoryItem.name,
-        price: inventoryItem.price,
+        price: normalizedPrice,
         quantity,
         subtotal
       });
@@ -128,15 +138,7 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       totalAmount += subtotal;
     }
 
-    // Second pass: Update inventory quantities
-    for (const orderItem of orderItems) {
-      await InventoryItem.findByIdAndUpdate(
-        orderItem.itemId,
-        { $inc: { quantity: -orderItem.quantity } }
-      );
-    }
-
-    // Create order
+    // Create order (shift stock will be deducted when staff marks as delivered)
     const order = new Order({
       bookingId,
       items: orderItems,

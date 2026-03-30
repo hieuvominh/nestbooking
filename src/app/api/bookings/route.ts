@@ -3,6 +3,8 @@ import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction, InventoryItem } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
+import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
+import { normalizeVndAmount } from '@/lib/currency';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -216,8 +218,8 @@ async function createBooking(request: AuthenticatedRequest) {
     const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
     const normalizedTotalAmount =
       typeof totalAmount === 'number' && totalAmount >= 0
-        ? totalAmount
-        : calculatedAmount;
+        ? normalizeVndAmount(totalAmount)
+        : normalizeVndAmount(calculatedAmount);
 
     const resolvedStatus =
       status || (start <= new Date() ? "checked-in" : "confirmed");
@@ -235,7 +237,7 @@ async function createBooking(request: AuthenticatedRequest) {
       totalAmount: normalizedTotalAmount,
       subtotalAmount:
         typeof subtotalAmount === 'number' && subtotalAmount >= 0
-          ? subtotalAmount
+          ? normalizeVndAmount(subtotalAmount)
           : undefined,
       discountPercent:
         typeof discountPercent === 'number' && discountPercent >= 0
@@ -268,6 +270,25 @@ async function createBooking(request: AuthenticatedRequest) {
     const booking = new Booking(bookingData);
 
     await booking.save();
+
+    // If booking is paid and uses a combo, create combo order + deduct shift stock
+    if (resolvedPaymentStatus === 'paid' && comboId) {
+      try {
+        await ensureComboOrderForPaidBooking({
+          bookingId: booking._id.toString(),
+          comboId: String(comboId),
+        });
+      } catch (err) {
+        // rollback booking so we don't keep a reserved table
+        try {
+          await Booking.findByIdAndDelete(booking._id);
+        } catch (cleanupErr) {
+          console.error('Failed to rollback booking after combo error:', cleanupErr);
+        }
+        const msg = err instanceof Error ? err.message : 'Combo processing failed';
+        return ApiResponses.badRequest(msg);
+      }
+    }
 
     // If bookingData included comboId but the currently compiled Booking model
     // doesn't have that path (hot-reload mismatch), ensure the comboId is
@@ -304,7 +325,7 @@ async function createBooking(request: AuthenticatedRequest) {
       type: 'income',
       amount: normalizedTotalAmount,
       source: 'booking',
-      description: `Booking for desk ${desk.label} - ${cleanCustomer.name}`,
+      description: `Đặt chỗ bàn ${desk.label} - ${cleanCustomer.name}`,
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId

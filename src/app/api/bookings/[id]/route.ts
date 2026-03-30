@@ -4,6 +4,7 @@ import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
+import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -41,6 +42,14 @@ async function getBooking(request: AuthenticatedRequest, { params }: BookingPara
 
     if (bookingDoc.status !== 'cancelled' && !bookingDoc.publicShortCode) {
       await ensurePublicShortCode(bookingDoc);
+      await bookingDoc.save();
+    }
+
+    if (bookingDoc.status !== 'cancelled' && !bookingDoc.publicToken) {
+      const bufferMinutes = parseInt(process.env.PUBLIC_BOOKING_BUFFER_MINUTES || '30');
+      const tokenExpiry = addMinutes(bookingDoc.endTime, bufferMinutes);
+      const publicUrl = generatePublicBookingUrl(String(bookingDoc._id), tokenExpiry);
+      bookingDoc.publicToken = publicUrl.split('?t=')[1];
       await bookingDoc.save();
     }
 
@@ -193,12 +202,30 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       updateData.completedAt = new Date();
     }
 
+
     // Update public token if times changed
     if (startTime || endTime) {
       const bufferMinutes = parseInt(process.env.PUBLIC_BOOKING_BUFFER_MINUTES || '30');
       const tokenExpiry = addMinutes(updateData.endTime || booking.endTime, bufferMinutes);
       const publicUrl = generatePublicBookingUrl(id, tokenExpiry);
       updateData.publicToken = publicUrl.split('?t=')[1];
+    }
+
+    // If payment is transitioning to paid and booking has combo, process combo order first
+    const isPayingNow =
+      booking.paymentStatus !== 'paid' &&
+      (updateData.paymentStatus === 'paid' || paymentStatus === 'paid');
+
+    if (isPayingNow && booking.comboId) {
+      try {
+        await ensureComboOrderForPaidBooking({
+          bookingId: booking._id.toString(),
+          comboId: String(booking.comboId),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Combo processing failed';
+        return ApiResponses.badRequest(msg);
+      }
     }
 
     const updatedBooking = await Booking.findByIdAndUpdate(
@@ -263,6 +290,8 @@ async function cancelBooking(request: AuthenticatedRequest, { params }: BookingP
 
     // Update booking status to cancelled
     booking.status = 'cancelled';
+    booking.publicToken = undefined;
+    booking.publicShortCode = undefined;
     await booking.save();
 
     // Handle refund transaction if payment was made
@@ -271,7 +300,7 @@ async function cancelBooking(request: AuthenticatedRequest, { params }: BookingP
         type: 'expense',
         amount: booking.totalAmount,
         source: 'booking',
-        description: `Refund for cancelled booking - ${booking.customer.name}`,
+        description: `Hoàn tiền huỷ đặt chỗ - ${booking.customer.name}`,
         referenceId: booking._id,
         referenceModel: 'Booking',
         createdBy: request.user.userId

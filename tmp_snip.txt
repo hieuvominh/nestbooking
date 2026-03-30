@@ -1,0 +1,2 @@
+Thu nhập": d.income,
+      "Chi phí": d.

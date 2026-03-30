@@ -86,14 +86,15 @@ export class EscPosBuilder {
     return this.text(leftTrunc + ' ' + right).lf();
   }
 
-  /** In 3 cột: tên | qty | giá */
+  /** In 3 cột: tên | qty | giá (canh cột cố định) */
   row3Col(name: string, qty: string, price: string, width = PAPER_WIDTH): this {
-    const priceW = price.length;
-    const qtyW = qty.length + 1;
-    const nameW = width - priceW - qtyW - 1;
+    const priceW = 10; // right-aligned
+    const qtyW = 4; // right-aligned
+    const nameW = Math.max(0, width - priceW - qtyW - 2);
     const nameTrunc = name.slice(0, nameW).padEnd(nameW, ' ');
-    const qtyPad = qty.padStart(qtyW, ' ');
-    return this.text(nameTrunc + qtyPad + ' ' + price).lf();
+    const qtyPad = qty.slice(0, qtyW).padStart(qtyW, ' ');
+    const pricePad = price.slice(0, priceW).padStart(priceW, ' ');
+    return this.text(nameTrunc + ' ' + qtyPad + ' ' + pricePad).lf();
   }
 
   divider(char = '-', width = PAPER_WIDTH): this {
@@ -108,6 +109,25 @@ export class EscPosBuilder {
     return this.push(CMD.OPEN_DRAWER_PIN2);
   }
 
+  /** Print QR code (Model 2) */
+  qrCode(data: string, size = 6, ecc = 48): this {
+    const payload = textToBytes(data);
+    const pL = (payload.length + 3) & 0xff;
+    const pH = (payload.length + 3) >> 8;
+
+    // Model 2
+    this.bytes.push(GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+    // Size (1-16)
+    this.bytes.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, size);
+    // Error correction (48=L,49=M,50=Q,51=H)
+    this.bytes.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, ecc);
+    // Store data
+    this.bytes.push(GS, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30, ...payload);
+    // Print
+    this.bytes.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30);
+    return this;
+  }
+
   build(): Uint8Array {
     return new Uint8Array(this.bytes);
   }
@@ -120,7 +140,7 @@ export interface ReceiptData {
   storeAddress?: string;
   storePhone?: string;
   invoiceNumber: string;
-  orderCode: string;
+  orderCode?: string;
   cashier: string;
   table: string;
   date: string;
@@ -132,6 +152,10 @@ export interface ReceiptData {
   cashReceived?: string;
   changeDue?: string;
   footerNote?: string;
+  qrValue?: string;
+  qrLabel?: string;
+  logoUrl?: string;
+  logoWidth?: number;
   openDrawer?: boolean;
 }
 
@@ -157,9 +181,9 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   b.lf();
 
   // Meta
-  b.alignLeft()
-    .line(`Ma DH : ${data.orderCode}`)
-    .line(`Thu ngan: ${data.cashier}`)
+  b.alignLeft();
+  if (data.orderCode) b.line(`Ma Don Hang : ${data.orderCode}`);
+  b.line(`Thu ngan: ${data.cashier}`)
     .line(`${data.table}`)
     .line(`Ngay  : ${data.date}`)
     .line(`Vao   : ${data.timeIn}`)
@@ -192,6 +216,10 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   // Footer
   b.alignCenter();
   if (data.footerNote) b.line(data.footerNote);
+  if (data.qrLabel) b.line(data.qrLabel);
+  if (data.qrValue) {
+    b.qrCode(data.qrValue, 6, 49).lf();
+  }
   b.line('Cam on quy khach!');
   b.line('Hen gap lai :)');
   b.lf();

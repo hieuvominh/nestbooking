@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { formatCurrency } from "@/lib/currency";
@@ -72,14 +72,14 @@ export default function BookingsPage() {
   // Filters
   const [startDate, setStartDate] = useState<string>(""); // yyyy-mm-dd
   const [endDate, setEndDate] = useState<string>("");
-  const [onlyToday, setOnlyToday] = useState<boolean>(false);
+  const [onlyToday, setOnlyToday] = useState<boolean>(true);
 
   const bookingsUrl = useMemo(() => {
     const base = "/api/bookings";
     const params = new URLSearchParams();
 
-    if (onlyToday) {
-      const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (onlyToday || (!startDate && !endDate)) {
       params.set("startDate", `${today}T00:00:00`);
       params.set("endDate", `${today}T23:59:59`);
     } else if (startDate && endDate) {
@@ -100,6 +100,16 @@ export default function BookingsPage() {
     refreshInterval: 300000, // Poll every 5 minutes
   });
   const { apiCall } = useApi();
+
+  // Initialize filter to today by default
+  useEffect(() => {
+    if (!onlyToday && startDate === "" && endDate === "") {
+      const today = new Date().toISOString().slice(0, 10);
+      setStartDate(today);
+      setEndDate(today);
+      setOnlyToday(true);
+    }
+  }, []);
 
   const handleSaveBooking = async () => {
     // This function is now handled inside the modal
@@ -136,7 +146,7 @@ export default function BookingsPage() {
         `/api/bookings/${id}/public-url`,
         {
           method: "POST",
-        }
+        },
       );
       navigator.clipboard.writeText(response.url);
       alert("Đã sao chép URL công khai vào clipboard!");
@@ -292,7 +302,7 @@ export default function BookingsPage() {
                 <TableHead className="min-w-[150px]">Trạng thái</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Thanh toán</TableHead>
-                <TableHead>Hành động</TableHead>
+                {/* <TableHead>Hành động</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -315,7 +325,7 @@ export default function BookingsPage() {
                   <TableCell className="min-w-[150px]">
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                        booking.status
+                        booking.status,
                       )}`}
                     >
                       {translateStatus(booking.status)}
@@ -348,7 +358,7 @@ export default function BookingsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  {/* <TableCell>
                     <div className="flex items-center gap-1">
                       <Button
                         size="icon"
@@ -423,7 +433,7 @@ export default function BookingsPage() {
                           </Button>
                         )}
                     </div>
-                  </TableCell>
+                  </TableCell> */}
                 </TableRow>
               ))}
             </TableBody>

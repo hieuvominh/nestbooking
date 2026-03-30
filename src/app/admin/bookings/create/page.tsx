@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/currency";
+import { formatCurrency, normalizeVndAmount } from "@/lib/currency";
 import {
   Card,
   CardContent,
@@ -41,6 +41,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getShiftCode, getShiftDateKey } from "@/lib/shift";
 
 // TypeScript Interfaces
 interface Desk {
@@ -87,9 +88,27 @@ interface BookingFormData {
   notes: string;
 }
 
+interface ShiftItem {
+  _id: string;
+  itemId: { _id: string; name: string; price: number; category: string };
+  openingQty: number;
+  receivedQty: number;
+  soldQty: number;
+}
+
+interface ShiftResponse {
+  dateKey: string;
+  shiftCode: string;
+  items: ShiftItem[];
+}
+
 export default function CreateBookingPage() {
   const router = useRouter();
   const { apiCall } = useApi();
+
+  // Current shift params (computed once on mount)
+  const shiftDateKey = getShiftDateKey();
+  const shiftCode = getShiftCode() ?? "S1";
 
   // Fetch available desks
   const { data: desks, isLoading: desksLoading } = useApi<Desk[]>("/api/desks");
@@ -97,6 +116,21 @@ export default function CreateBookingPage() {
   // Fetch inventory items (including combos)
   const { data: inventory, isLoading: inventoryLoading } =
     useApi<InventoryItem[]>("/api/inventory");
+
+  // Fetch current shift inventory for single items
+  const { data: shiftData } = useApi<ShiftResponse>(
+    `/api/shift-inventory?dateKey=${shiftDateKey}&shiftCode=${shiftCode}`,
+  );
+
+  // Map itemId → remaining qty in current shift
+  const shiftQtyMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    shiftData?.items?.forEach((it) => {
+      const id = String(it.itemId?._id);
+      map[id] = it.openingQty + it.receivedQty - it.soldQty;
+    });
+    return map;
+  }, [shiftData?.items]);
 
   // Form state
   const [formData, setFormData] = useState<BookingFormData>({
@@ -114,7 +148,7 @@ export default function CreateBookingPage() {
 
   // Combo state - tracks selected combo package
   const [selectedCombo, setSelectedCombo] = useState<InventoryItem | null>(
-    null
+    null,
   );
 
   // Duration in hours for manual bookings (used when no combo selected)
@@ -125,7 +159,7 @@ export default function CreateBookingPage() {
   const toLocalDateTimeInput = (date: Date) => {
     const pad = (num: number) => String(num).padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-      date.getDate()
+      date.getDate(),
     )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
@@ -164,7 +198,7 @@ export default function CreateBookingPage() {
 
       const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(
-        startDate.getTime() + selectedCombo.duration * 60 * 60 * 1000
+        startDate.getTime() + selectedCombo.duration * 60 * 60 * 1000,
       );
 
       const endYear = endDate.getFullYear();
@@ -186,7 +220,7 @@ export default function CreateBookingPage() {
 
       const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(
-        startDate.getTime() + durationHours * 60 * 60 * 1000
+        startDate.getTime() + durationHours * 60 * 60 * 1000,
       );
 
       const endYear = endDate.getFullYear();
@@ -221,16 +255,21 @@ export default function CreateBookingPage() {
 
     if (selectedCombo) {
       // Combo selected: use fixed combo price
-      return selectedCombo.price;
+      return normalizeVndAmount(selectedCombo.price);
     }
     // Regular booking: calculate based on desk hourly rate
     if (!selectedDesk || bookingDuration <= 0) return 0;
-    return Math.ceil(bookingDuration * selectedDesk.hourlyRate);
+    return Math.ceil(
+      bookingDuration * normalizeVndAmount(selectedDesk.hourlyRate),
+    );
   }, [selectedCombo, selectedDesk, bookingDuration]);
 
   // Calculate inventory/cart total (add-ons)
   const inventoryTotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return cart.reduce(
+      (sum, item) => sum + normalizeVndAmount(item.price) * item.quantity,
+      0,
+    );
   }, [cart]);
 
   // Booking total (desk/combo only). Orders are paid separately.
@@ -256,14 +295,14 @@ export default function CreateBookingPage() {
         isCombo: true,
       }
     : selectedDesk
-    ? {
-        id: `desk-${selectedDesk._id}`,
-        name: `Thuê Bàn - ${selectedDesk.label}`,
-        price: displayedDeskCost,
-        quantity: 1,
-        isCombo: false,
-      }
-    : null;
+      ? {
+          id: `desk-${selectedDesk._id}`,
+          name: `Thuê Bàn - ${selectedDesk.label}`,
+          price: displayedDeskCost,
+          quantity: 1,
+          isCombo: false,
+        }
+      : null;
 
   const clearDeskSelection = () => {
     // Clear desk selection and reset duration
@@ -279,15 +318,16 @@ export default function CreateBookingPage() {
     if (!inventory) return [];
 
     return inventory.filter((item) => {
-      // Filter by active status and stock
-      if (item.isActive === false || item.quantity <= 0) return false;
-
-      // Filter by view mode (items vs combos)
+      // Combos: use main inventory stock
       if (viewMode === "combos") {
         if (item.type !== "combo") return false;
+        if (item.isActive === false) return false;
       } else {
-        // In items view, exclude combos
+        // Single items: use shift inventory stock
         if (item.type === "combo") return false;
+        if (item.isActive === false) return false;
+        const shiftQty = shiftQtyMap[String(item._id)] ?? 0;
+        if (shiftQty <= 0) return false;
       }
 
       // Filter by category (not applicable in combo view)
@@ -316,7 +356,7 @@ export default function CreateBookingPage() {
   const selectCombo = (combo: InventoryItem) => {
     setSelectedCombo(combo);
     toast.success(
-      `${combo.name} đã được chọn! Thời lượng: ${combo.duration} giờ`
+      `${combo.name} đã được chọn! Thời lượng: ${combo.duration} giờ`,
     );
   };
 
@@ -331,7 +371,7 @@ export default function CreateBookingPage() {
 
       const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(
-        startDate.getTime() + durationHours * 60 * 60 * 1000
+        startDate.getTime() + durationHours * 60 * 60 * 1000,
       );
 
       const endYear = endDate.getFullYear();
@@ -373,8 +413,8 @@ export default function CreateBookingPage() {
         cart.map((cartItem) =>
           cartItem.itemId === item._id
             ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        )
+            : cartItem,
+        ),
       );
     } else {
       // Add new item to cart
@@ -402,8 +442,8 @@ export default function CreateBookingPage() {
 
     setCart(
       cart.map((item) =>
-        item.itemId === itemId ? { ...item, quantity: newQuantity } : item
-      )
+        item.itemId === itemId ? { ...item, quantity: newQuantity } : item,
+      ),
     );
   };
 
@@ -466,15 +506,15 @@ export default function CreateBookingPage() {
       // Compute actual start (check-in) and end times now (start = now)
       const now = new Date();
       now.setSeconds(0, 0);
-        const startIso = toLocalDateTimeInput(now);
+      const startIso = toLocalDateTimeInput(now);
 
       let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
       if (selectedCombo && selectedCombo.duration) {
         endDate = new Date(
-          now.getTime() + selectedCombo.duration * 60 * 60 * 1000
+          now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
         );
       }
-        const endIso = toLocalDateTimeInput(endDate);
+      const endIso = toLocalDateTimeInput(endDate);
 
       // Basic validation for computed times
       if (endDate.getTime() <= now.getTime()) {
@@ -484,18 +524,18 @@ export default function CreateBookingPage() {
       }
 
       // Persist computed times to formData for UI consistency
-        setFormData((prev) => ({
-          ...prev,
-          startTime: startIso,
-          endTime: endIso,
-        }));
-        setStartPreview(startIso);
+      setFormData((prev) => ({
+        ...prev,
+        startTime: startIso,
+        endTime: endIso,
+      }));
+      setStartPreview(startIso);
 
-        // Walk-in flow: payment is required before use, so mark as checked-in + paid.
-        const resolvedStatus = "checked-in";
-        const resolvedPaymentStatus = "paid";
+      // Walk-in flow: payment is required before use, so mark as checked-in + paid.
+      const resolvedStatus = "checked-in";
+      const resolvedPaymentStatus = "paid";
 
-        // Always create booking and redirect to billing page for payment/invoice
+      // Always create booking and redirect to billing page for payment/invoice
       const bookingData = {
         customer: {
           name: formData.customerName,
@@ -548,10 +588,20 @@ export default function CreateBookingPage() {
           notes: `Items ordered with booking`,
         };
 
-        await apiCall("/api/orders", {
-          method: "POST",
-          body: orderData,
-        });
+        try {
+          await apiCall("/api/orders", {
+            method: "POST",
+            body: orderData,
+          });
+        } catch (orderError) {
+          // rollback booking to avoid reserved desk when order fails
+          try {
+            await apiCall(`/api/bookings/${bookingId}`, { method: "DELETE" });
+          } catch (rollbackErr) {
+            console.error("Failed to rollback booking:", rollbackErr);
+          }
+          throw orderError;
+        }
       }
 
       toast.success("Đã tạo đặt bàn thành công!");
@@ -560,7 +610,19 @@ export default function CreateBookingPage() {
       router.push(`/admin/billing/${bookingId}`);
     } catch (error) {
       console.error("Error creating booking:", error);
-      toast.error("Tạo đặt bàn thất bại. Vui lòng thử lại.");
+      const msg =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : typeof error === "object" && error
+              ? // Try common error shapes
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (error as any).error ||
+                (error as any).message ||
+                JSON.stringify(error)
+              : "Tạo bàn thất bại. Vui lòng thử lại.";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -596,7 +658,7 @@ export default function CreateBookingPage() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
           {/* Left Column - Booking Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Customer Information */}
@@ -992,7 +1054,7 @@ export default function CreateBookingPage() {
                                               ? comp.item
                                               : comp.item?._id;
                                           const found = inventory?.find(
-                                            (it: any) => it._id === compId
+                                            (it: any) => it._id === compId,
                                           );
                                           const label = found
                                             ? found.name
@@ -1011,7 +1073,7 @@ export default function CreateBookingPage() {
                                         return (
                                           <li key={idx}>{String(comp)}</li>
                                         );
-                                      }
+                                      },
                                     )}
                                   </ul>
                                 </div>
@@ -1038,7 +1100,6 @@ export default function CreateBookingPage() {
                               type="button"
                               size="sm"
                               onClick={() => selectCombo(combo)}
-                              disabled={combo.quantity <= 0}
                             >
                               <Check className="h-4 w-4 mr-1" />
                               Chọn
@@ -1068,7 +1129,7 @@ export default function CreateBookingPage() {
                           </div>
                           <Badge
                             className={`text-xs ${getCategoryColor(
-                              item.category
+                              item.category,
                             )}`}
                           >
                             {item.category}
@@ -1082,14 +1143,14 @@ export default function CreateBookingPage() {
                             type="button"
                             size="sm"
                             onClick={() => addToCart(item)}
-                            disabled={item.quantity <= 0}
+                            disabled={(shiftQtyMap[item._id] ?? 0) <= 0}
                           >
                             <Plus className="h-4 w-4 mr-1" />
                             Thêm
                           </Button>
                         </div>
                         <p className="text-xs text-gray-400 mt-1">
-                          Tồn kho: {item.quantity} {item.unit}
+                          Tồn kho ca: {shiftQtyMap[item._id] ?? 0} {item.unit}
                         </p>
                       </div>
                     ))
@@ -1100,7 +1161,7 @@ export default function CreateBookingPage() {
           </div>
 
           {/* Right Column - Cart & Payment */}
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
             {/* Cart */}
             <Card>
               <CardHeader>
@@ -1144,11 +1205,11 @@ export default function CreateBookingPage() {
                               {!deskCartEntry.isCombo && formData.startTime
                                 ? `Thời lượng: ${Math.max(
                                     1,
-                                    durationHours
+                                    durationHours,
                                   )} giờ`
                                 : deskCartEntry.isCombo
-                                ? "Gói cố định"
-                                : "Chưa chọn bàn"}
+                                  ? "Gói cố định"
+                                  : "Chưa chọn bàn"}
                             </p>
                           </div>
                           <Button
@@ -1169,7 +1230,7 @@ export default function CreateBookingPage() {
                           </div>
                           <span className="font-bold">
                             {formatCurrency(
-                              deskCartEntry.price * deskCartEntry.quantity
+                              deskCartEntry.price * deskCartEntry.quantity,
                             )}
                           </span>
                         </div>
@@ -1208,7 +1269,7 @@ export default function CreateBookingPage() {
                               onClick={() =>
                                 updateCartQuantity(
                                   item.itemId,
-                                  item.quantity - 1
+                                  item.quantity - 1,
                                 )
                               }
                             >
@@ -1225,7 +1286,7 @@ export default function CreateBookingPage() {
                               onClick={() =>
                                 updateCartQuantity(
                                   item.itemId,
-                                  item.quantity + 1
+                                  item.quantity + 1,
                                 )
                               }
                             >
@@ -1233,7 +1294,9 @@ export default function CreateBookingPage() {
                             </Button>
                           </div>
                           <span className="font-bold">
-                            {formatCurrency(item.price * item.quantity)}
+                            {formatCurrency(
+                              normalizeVndAmount(item.price) * item.quantity,
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1261,9 +1324,7 @@ export default function CreateBookingPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      Món ({cart.length}) (thanh toán riêng)
-                    </span>
+                    <span className="text-gray-600">Món ({cart.length})</span>
                     <span className="font-medium">
                       {formatCurrency(inventoryTotal)}
                     </span>
@@ -1273,15 +1334,11 @@ export default function CreateBookingPage() {
 
                   <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
                     <span className="text-lg font-semibold">
-                      Tổng thanh toán (bàn)
+                      Tổng thanh toán
                     </span>
                     <span className="text-2xl font-bold">
-                      {formatCurrency(displayedBookingTotal)}
+                      {formatCurrency(displayedGrandTotal)}
                     </span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Tổng dự kiến (bàn + món)</span>
-                    <span>{formatCurrency(displayedGrandTotal)}</span>
                   </div>
                 </div>
                 {/* Submit Button */}
@@ -1289,11 +1346,11 @@ export default function CreateBookingPage() {
                   type="submit"
                   className="w-full"
                   size="lg"
-                  disabled={isSubmitting || displayedBookingTotal === 0}
+                  disabled={isSubmitting || displayedGrandTotal === 0}
                 >
                   {isSubmitting
                     ? "Đang tạo đặt bàn..."
-                    : `Tạo Đặt Bàn - ${formatCurrency(displayedBookingTotal)}`}
+                    : `Tạo Đặt Bàn - ${formatCurrency(displayedGrandTotal)}`}
                 </Button>
 
                 {/* Info */}
