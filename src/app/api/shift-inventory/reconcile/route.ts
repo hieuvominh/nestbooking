@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { InventoryItem, ShiftInventory } from '@/models';
 import { ApiResponses, requireRole } from '@/lib/api-middleware';
 import { getShiftCode, getShiftDateKey } from '@/lib/shift';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 
 interface ReconcileItem {
   itemId: string;
@@ -52,7 +53,7 @@ async function reconcileShift(request: NextRequest) {
 
       shift.actualQty = actualQty;
       shift.variance = actualQty - expectedQty;
-      shift.reconciledAt = new Date();
+      shift.reconciledAt = getNowInVietnam();
       await shift.save();
     }
 

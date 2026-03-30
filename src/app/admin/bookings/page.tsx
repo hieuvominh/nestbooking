@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { formatCurrency } from "@/lib/currency";
+import { getVietnamDateString } from "@/lib/vietnam-time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -70,7 +71,7 @@ export default function BookingsPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Filters
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getVietnamDateString();
   const [startDate, setStartDate] = useState<string>(todayStr); // yyyy-mm-dd
   const [endDate, setEndDate] = useState<string>(todayStr);
   const [onlyToday, setOnlyToday] = useState<boolean>(true);
@@ -79,7 +80,7 @@ export default function BookingsPage() {
     const base = "/api/bookings";
     const params = new URLSearchParams();
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getVietnamDateString();
     if (onlyToday || (!startDate && !endDate)) {
       params.set("startDate", `${today}T00:00:00`);
       params.set("endDate", `${today}T23:59:59`);
@@ -263,7 +264,7 @@ export default function BookingsPage() {
                   const checked = c === true;
                   setOnlyToday(checked);
                   if (checked) {
-                    const today = new Date().toISOString().slice(0, 10);
+                    const today = getVietnamDateString();
                     setStartDate(today);
                     setEndDate(today);
                   }

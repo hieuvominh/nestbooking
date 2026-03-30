@@ -5,6 +5,7 @@ import { Booking, Desk, Transaction, InventoryItem } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
 import { normalizeVndAmount } from '@/lib/currency';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -27,8 +28,9 @@ async function getBookings(request: AuthenticatedRequest) {
 
     // Auto-cancel no-show confirmed bookings and auto-complete active bookings.
     // This keeps the booking statuses up-to-date without relying on a worker.
+    // NOTE: Using Vietnam time (UTC+7) for consistency with business logic
     try {
-      const now = new Date();
+      const now = getNowInVietnam();
       const parsedNoShow = parseInt(
         process.env.BOOKING_NO_SHOW_MINUTES || '30',
         10
@@ -219,9 +221,9 @@ async function createBooking(request: AuthenticatedRequest) {
       typeof totalAmount === 'number' && totalAmount >= 0
         ? normalizeVndAmount(totalAmount)
         : normalizeVndAmount(calculatedAmount);
-
+    // Auto-status: if startTime is now or past (in Vietnam time), mark as checked-in
     const resolvedStatus =
-      status || (start <= new Date() ? "checked-in" : "confirmed");
+      status || (start <= getNowInVietnam() ? 'checked-in' : 'confirmed');
     const resolvedPaymentStatus =
       resolvedStatus === "checked-in"
         ? "paid"
@@ -261,11 +263,11 @@ async function createBooking(request: AuthenticatedRequest) {
       }
     }
 
-    // Add checkedInAt if provided (for immediate check-ins)
+    // Note: Store Vietnam time as UTC in DB (getNowInVietnam already converts)
     if (checkedInAt) {
       bookingData.checkedInAt = new Date(checkedInAt);
-    } else if (resolvedStatus === "checked-in") {
-      bookingData.checkedInAt = new Date();
+    } else if (resolvedStatus === 'checked-in') {
+      bookingData.checkedInAt = getNowInVietnam();
     }
 
     // Create booking

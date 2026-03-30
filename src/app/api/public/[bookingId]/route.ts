@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import { Booking } from '@/models';
 import { validatePublicBookingAccess } from '@/lib/jwt';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 import { ApiResponses } from '@/lib/api-middleware';
 
 interface PublicBookingParams {
@@ -105,12 +106,12 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
       return ApiResponses.unauthorized('Booking has ended');
     }
 
-    // Validate check-in conditions
+    // Validate check-in conditions (using Vietnam time)
     if (booking.status !== 'confirmed') {
       return ApiResponses.badRequest('Booking must be confirmed to check in');
     }
 
-    const now = new Date();
+    const now = getNowInVietnam();
     const startTime = new Date(booking.startTime);
     const endTime = new Date(booking.endTime);
 
@@ -127,7 +128,7 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
 
     // Update booking status
     booking.status = 'checked-in';
-    booking.checkedInAt = now;
+    booking.checkedInAt = getNowInVietnam();
     await booking.save();
 
     return ApiResponses.success({

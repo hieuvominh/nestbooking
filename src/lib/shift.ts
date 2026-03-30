@@ -1,3 +1,5 @@
+import { toVietnamTime, getNowInVietnam, getVietnamDateString } from "@/lib/vietnam-time";
+
 export type ShiftCode = "S1" | "S2" | "S3";
 
 export interface ShiftDefinition {
@@ -12,14 +14,8 @@ export const SHIFT_DEFINITIONS: ShiftDefinition[] = [
   { code: "S3", startHour: 17, endHour: 22 },
 ];
 
-function toBangkokDate(date: Date): Date {
-  // Convert to Asia/Bangkok (UTC+7) without external libs
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  return new Date(utc + 7 * 60 * 60000);
-}
-
 export function getShiftCode(date: Date = new Date()): ShiftCode | null {
-  const local = toBangkokDate(date);
+  const local = toVietnamTime(date);
   const hour = local.getHours();
   const shift = SHIFT_DEFINITIONS.find(
     (s) => hour >= s.startHour && hour < s.endHour
@@ -28,11 +24,7 @@ export function getShiftCode(date: Date = new Date()): ShiftCode | null {
 }
 
 export function getShiftDateKey(date: Date = new Date()): string {
-  const local = toBangkokDate(date);
-  const y = local.getFullYear();
-  const m = String(local.getMonth() + 1).padStart(2, "0");
-  const d = String(local.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return getVietnamDateString(date);
 }
 
 export function isWithinShift(
@@ -43,5 +35,5 @@ export function isWithinShift(
   const hour = local.getHours();
   const shift = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode);
   if (!shift) return false;
-  return hour >= shift.startHour && hour < shift.endHour;
+  return hour >= sVietnamTimHour && hour < shift.endHour;
 }
