@@ -121,7 +121,12 @@ export default function AdminLayout({
       {/* Desktop Sidebar (hidden on small screens) */}
       <div className="hidden lg:flex w-64 bg-white shadow-lg border-r border-slate-200/50 flex-col h-screen fixed left-0 top-0 z-50">
         {/* Logo Section */}
-        <div className="flex items-center justify-center h-16 px-4 border-b border-slate-200/50 flex-shrink-0">
+        <div className="flex flex-col items-center justify-center px-4 py-4 border-b border-slate-200/50 flex-shrink-0">
+          <img
+            src="/app-logo.png"
+            alt="Nest Study Space Logo"
+            className="w-24 h-auto object-contain mb-3"
+          />
           <Link
             href="/admin/bookings/create"
             className="flex items-center justify-center space-x-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-200 text-white font-bold text-base shadow"

@@ -5,6 +5,7 @@ import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -208,10 +209,10 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
 
     // Handle check-in
     if (status === 'checked-in' && booking.status !== 'checked-in') {
-      updateData.checkedInAt = new Date();
+      updateData.checkedInAt = getNowInVietnam();
     }
     if (status === 'completed' && booking.status !== 'completed') {
-      updateData.completedAt = new Date();
+      updateData.completedAt = getNowInVietnam();
     }
 
 

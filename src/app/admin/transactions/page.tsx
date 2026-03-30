@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { useAuth } from "@/contexts/AuthContext";
+import { getVietnamDateString } from "@/lib/vietnam-time";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,8 +138,8 @@ type Mode = "month" | "range";
 export default function TransactionsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const today = new Date().toISOString().slice(0, 10);
-  const currentYM = new Date().toISOString().slice(0, 7);
+  const today = getVietnamDateString();
+  const currentYM = getVietnamDateString().slice(0, 7);
 
   const [mode, setMode] = useState<Mode>("month");
   const [selectedMonth, setSelectedMonth] = useState(currentYM);

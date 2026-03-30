@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import { Desk, Booking } from '@/models';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 
 interface DeskParams {
   params: Promise<{ id: string }>;
@@ -67,7 +68,7 @@ async function updateDesk(request: AuthenticatedRequest, { params }: DeskParams)
 
     // If changing to maintenance, check for active bookings
     if (status === 'maintenance') {
-      const now = new Date();
+      const now = getNowInVietnam();
       const activeBooking = await Booking.findOne({
         deskId: id,
         startTime: { $lte: now },

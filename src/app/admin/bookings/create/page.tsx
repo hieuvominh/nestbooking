@@ -42,6 +42,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getShiftCode, getShiftDateKey } from "@/lib/shift";
+import {
+  getNowInVietnam,
+  formatDateTimeLocal,
+  dateTimeLocalToUTC,
+} from "@/lib/vietnam-time";
 
 // TypeScript Interfaces
 interface Desk {
@@ -160,17 +165,10 @@ export default function CreateBookingPage() {
   // Reveal time-based pricing only after user clicks create
   const [revealTimeCost, setRevealTimeCost] = useState<boolean>(false);
 
-  const toLocalDateTimeInput = (date: Date) => {
-    const pad = (num: number) => String(num).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-      date.getDate(),
-    )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
-
   const getNowPreview = () => {
-    const now = new Date();
+    const now = getNowInVietnam();
     now.setSeconds(0, 0);
-    return toLocalDateTimeInput(now);
+    return formatDateTimeLocal(now);
   };
 
   // Check-in time preview (disabled) — refresh when desk selection changes
@@ -506,9 +504,9 @@ export default function CreateBookingPage() {
 
     try {
       // Compute actual start (check-in) and end times now (start = now)
-      const now = new Date();
+      const now = getNowInVietnam();
       now.setSeconds(0, 0);
-      const startIso = toLocalDateTimeInput(now);
+      const startIso = formatDateTimeLocal(now);
 
       let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
       if (selectedCombo && selectedCombo.duration) {
@@ -516,7 +514,7 @@ export default function CreateBookingPage() {
           now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
         );
       }
-      const endIso = toLocalDateTimeInput(endDate);
+      const endIso = formatDateTimeLocal(endDate);
 
       // Basic validation for computed times
       if (endDate.getTime() <= now.getTime()) {
@@ -545,8 +543,8 @@ export default function CreateBookingPage() {
           phone: formData.customerPhone || undefined,
         },
         deskId: formData.deskId,
-        startTime: startIso,
-        endTime: endIso,
+        startTime: dateTimeLocalToUTC(startIso),
+        endTime: dateTimeLocalToUTC(endIso),
         status: resolvedStatus,
         totalAmount: bookingTotal,
         subtotalAmount: bookingTotal,

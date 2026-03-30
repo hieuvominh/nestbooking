@@ -41,8 +41,13 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Nest Study Space</CardTitle>
-          <CardDescription>Đăng nhập tài khoản quản trị</CardDescription>
+          <div className="flex justify-center mb-4">
+            <img
+              src="/app-logo.png"
+              alt="Nest Study Space Logo"
+              className="w-32 h-auto object-contain"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -84,12 +89,6 @@ export default function LoginPage() {
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-gray-600">
-            <p>Demo credentials:</p>
-            <p>admin@bookingcoo.com / admin123</p>
-            <p>staff@bookingcoo.com / staff123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

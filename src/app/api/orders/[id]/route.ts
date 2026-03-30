@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { Order } from '@/models';
 import { applyShiftSale } from '@/lib/shift-stock';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 
 // GET /api/orders/[id] - Get order by ID
 async function getOrder(request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,7 +50,7 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
 
     // If status is being changed to 'delivered', set deliveredAt
     if (status === 'delivered' && !deliveredAt) {
-      updateData.deliveredAt = new Date();
+      updateData.deliveredAt = getNowInVietnam();
     }
 
     // Apply shift stock when marking as delivered (only if not already delivered)

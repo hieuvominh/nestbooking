@@ -12,6 +12,7 @@ import {
 import { RefreshIndicator } from "@/components/ui/refresh-indicator";
 import { formatCurrency } from "@/lib/currency";
 import { useAuth } from "@/contexts/AuthContext";
+import { getNowInVietnamMs, getVietnamDateString } from "@/lib/vietnam-time";
 
 function playNewOrderSound() {
   try {
@@ -100,7 +101,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [soundEnabled]);
 
-  const nowMs = Date.now();
+  const nowMs = getNowInVietnamMs();
   const bookingList = bookings?.bookings || [];
 
   const activeNowBookings = bookingList.filter((booking: any) => {
@@ -139,8 +140,9 @@ export default function DashboardPage() {
     availableDesks: Math.max((desks?.length || 0) - occupiedDeskIds.size, 0),
     todayBookings: bookingList.filter((booking: any) => {
       if (booking.status === "cancelled") return false;
-      const today = new Date().toDateString();
-      return new Date(booking.startTime).toDateString() === today;
+      const today = getVietnamDateString();
+      const bookingDate = getVietnamDateString(new Date(booking.startTime));
+      return bookingDate === today;
     }).length,
     activeBookings: activeNowBookings.length,
     lowStockItems: inventory?.length || 0,
@@ -270,7 +272,7 @@ export default function DashboardPage() {
                 )
                 .slice(0, 5)
                 .map((booking: any) => {
-                  const nowMs = Date.now();
+                  const nowMs = getNowInVietnamMs();
                   const endMs = new Date(booking.endTime).getTime();
                   const remainingMinutes = Math.ceil(
                     (endMs - nowMs) / (1000 * 60),

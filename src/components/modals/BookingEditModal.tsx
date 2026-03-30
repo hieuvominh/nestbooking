@@ -6,6 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { EditModal } from "./EditModal";
 import { useApi } from "@/hooks/useApi";
+import { formatCurrency } from "@/lib/currency";
+import {
+  formatDateTimeLocal,
+  dateTimeLocalToUTC,
+  getNowInVietnam,
+} from "@/lib/vietnam-time";
 import {
   Form,
   FormControl,
@@ -154,8 +160,8 @@ export function BookingEditModal({
         customerPhone: booking.customer.phone,
         customerEmail: booking.customer.email || "",
         deskId: booking.deskId,
-        startTime: new Date(booking.startTime).toISOString().slice(0, 16),
-        endTime: new Date(booking.endTime).toISOString().slice(0, 16),
+        startTime: formatDateTimeLocal(booking.startTime),
+        endTime: formatDateTimeLocal(booking.endTime),
         status: booking.status,
         paymentMethod: "cash", // Default since not in existing model
         totalAmount: booking.totalAmount,
@@ -163,13 +169,15 @@ export function BookingEditModal({
         notes: booking.notes || "",
       });
     } else {
+      const nowVN = getNowInVietnam();
+      const oneHourLaterVN = new Date(nowVN.getTime() + 3600000);
       form.reset({
         customerName: "",
         customerPhone: "",
         customerEmail: "",
         deskId: "",
-        startTime: new Date().toISOString().slice(0, 16),
-        endTime: new Date(Date.now() + 3600000).toISOString().slice(0, 16), // +1 hour
+        startTime: formatDateTimeLocal(nowVN),
+        endTime: formatDateTimeLocal(oneHourLaterVN),
         status: "confirmed",
         paymentMethod: "cash",
         totalAmount: 0,
@@ -191,9 +199,8 @@ export function BookingEditModal({
           phone: data.customerPhone,
           email: data.customerEmail || "",
         },
-        deskId: data.deskId,
-        startTime: new Date(data.startTime).toISOString(),
-        endTime: new Date(data.endTime).toISOString(),
+        startTime: dateTimeLocalToUTC(data.startTime),
+        endTime: dateTimeLocalToUTC(data.endTime),
         status: data.status,
         totalAmount: data.totalAmount,
         paymentStatus: data.paymentStatus,

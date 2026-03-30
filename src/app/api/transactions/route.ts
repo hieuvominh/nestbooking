@@ -3,6 +3,7 @@ import { startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Transaction } from '@/models';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+import { getNowInVietnam, getVietnamDateString } from '@/lib/vietnam-time';
 
 // GET /api/transactions
 async function getTransactions(request: AuthenticatedRequest) {
@@ -41,7 +42,7 @@ async function getTransactions(request: AuthenticatedRequest) {
         $lte: endOfMonth(new Date(year, monthNum - 1)),
       };
     } else {
-      const now = new Date();
+      const now = getNowInVietnam();
       dateQuery.date = {
         $gte: startOfMonth(now),
         $lte: endOfMonth(now),
@@ -51,11 +52,10 @@ async function getTransactions(request: AuthenticatedRequest) {
     // Staff can only view today's revenue (income) for safety
     const isAdmin = request.user?.role === 'admin';
     if (!isAdmin) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const end = new Date(today);
-      end.setHours(23, 59, 59, 999);
-      dateQuery = { date: { $gte: today, $lte: end } };
+      const today = getVietnamDateString();
+      const todayStart = new Date(`${today}T00:00:00+07:00`);
+      const end = new Date(`${today}T23:59:59.999+07:00`);
+      dateQuery = { date: { $gte: todayStart, $lte: end } };
     }
 
     const query: any = { ...dateQuery };

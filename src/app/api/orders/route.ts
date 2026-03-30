@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { Order, Transaction } from '@/models';
 import { normalizeVndAmount } from '@/lib/currency';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+import { getNowInVietnam } from '@/lib/vietnam-time';
 
 // GET /api/orders - Get all orders
 async function getOrders(request: AuthenticatedRequest) {
@@ -82,7 +83,7 @@ async function createOrder(request: AuthenticatedRequest) {
       total,
       status: 'pending',
       notes,
-      orderedAt: new Date()
+      orderedAt: getNowInVietnam()
     });
 
     await order.save();

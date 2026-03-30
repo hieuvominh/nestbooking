@@ -441,7 +441,12 @@ export default function PublicBookingPage() {
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <div className="mx-auto w-full max-w-md px-4 py-4 space-y-4">
-        <div className="text-left">
+        <div className="flex flex-col items-center text-center">
+          <img
+            src="/app-logo.png"
+            alt="Nest Study Space Logo"
+            className="w-20 h-auto object-contain mb-3"
+          />
           <h1 className="text-2xl font-bold text-gray-900">Nest Study Space</h1>
           <p className="text-gray-600">Gọi món nhanh</p>
         </div>
