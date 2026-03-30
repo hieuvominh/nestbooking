@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { formatCurrency } from "@/lib/currency";
@@ -70,16 +70,17 @@ export default function BookingsPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Filters
-  const [startDate, setStartDate] = useState<string>(""); // yyyy-mm-dd
-  const [endDate, setEndDate] = useState<string>("");
-  const [onlyToday, setOnlyToday] = useState<boolean>(false);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState<string>(todayStr); // yyyy-mm-dd
+  const [endDate, setEndDate] = useState<string>(todayStr);
+  const [onlyToday, setOnlyToday] = useState<boolean>(true);
 
   const bookingsUrl = useMemo(() => {
     const base = "/api/bookings";
     const params = new URLSearchParams();
 
-    if (onlyToday) {
-      const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (onlyToday || (!startDate && !endDate)) {
       params.set("startDate", `${today}T00:00:00`);
       params.set("endDate", `${today}T23:59:59`);
     } else if (startDate && endDate) {
@@ -136,7 +137,7 @@ export default function BookingsPage() {
         `/api/bookings/${id}/public-url`,
         {
           method: "POST",
-        }
+        },
       );
       navigator.clipboard.writeText(response.url);
       alert("Đã sao chép URL công khai vào clipboard!");
@@ -212,7 +213,10 @@ export default function BookingsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Quản lý đặt chỗ</h1>
-        <Button onClick={() => router.push("/admin/bookings/create")}>
+        <Button
+          onClick={() => router.push("/admin/bookings/create")}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-700 hover:to-indigo-700"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Tạo đặt chỗ mới
         </Button>
@@ -279,7 +283,7 @@ export default function BookingsPage() {
                   setOnlyToday(false);
                 }}
               >
-                Clear
+                Xóa bộ lọc
               </Button>
             </div>
           </div>
@@ -292,7 +296,7 @@ export default function BookingsPage() {
                 <TableHead className="min-w-[150px]">Trạng thái</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Thanh toán</TableHead>
-                <TableHead>Hành động</TableHead>
+                {/* <TableHead>Hành động</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -315,7 +319,7 @@ export default function BookingsPage() {
                   <TableCell className="min-w-[150px]">
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                        booking.status
+                        booking.status,
                       )}`}
                     >
                       {translateStatus(booking.status)}
@@ -348,7 +352,7 @@ export default function BookingsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  {/* <TableCell>
                     <div className="flex items-center gap-1">
                       <Button
                         size="icon"
@@ -423,7 +427,7 @@ export default function BookingsPage() {
                           </Button>
                         )}
                     </div>
-                  </TableCell>
+                  </TableCell> */}
                 </TableRow>
               ))}
             </TableBody>

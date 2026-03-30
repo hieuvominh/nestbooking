@@ -1,17 +1,9 @@
 ﻿"use client";
 
-import React, { useRef } from "react";
-import { useReactToPrint } from "react-to-print";
-import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import React from "react";
 import { formatCurrency } from "@/lib/currency";
-import { Receipt58mm, type ReceiptItem } from "@/components/Receipt58mm";
-import { Be_Vietnam_Pro } from "next/font/google";
-
-const beVietnamPro = Be_Vietnam_Pro({
-  subsets: ["vietnamese"],
-  weight: ["400", "500", "600", "700"],
-});
+import { type ReceiptItem } from "@/components/Receipt58mm";
+import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
 
 interface PrintBillProps {
   booking: {
@@ -33,6 +25,8 @@ interface PrintBillProps {
       name: string;
       duration: number;
       price: number;
+      pricePerPerson?: boolean;
+      guestCount?: number;
     };
     items?: Array<{
       name: string;
@@ -59,6 +53,7 @@ interface PrintBillProps {
   cashGiven?: number;
   changeDue?: number;
   discountPercent?: number;
+  discountAmount?: number;
   vatPercent?: number;
   storeInfo?: {
     name: string;
@@ -96,6 +91,7 @@ export function PrintBill({
   cashGiven,
   changeDue,
   discountPercent = 0,
+  discountAmount = 0,
   vatPercent = 0,
   storeInfo = {
     name: "NEST LEARNING",
@@ -106,32 +102,6 @@ export function PrintBill({
   brandInfo,
   footerInfo,
 }: PrintBillProps) {
-  const componentRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = useReactToPrint({
-    contentRef: componentRef,
-    documentTitle: `Bill-${booking._id.slice(-8)}`,
-    pageStyle: `
-      @page {
-        size: 58mm auto;
-        margin: 0;
-      }
-      @media print {
-        body {
-          margin: 0;
-          padding: 0;
-          font-family: ${fontFamily};
-          font-size: 11px;
-          -webkit-print-color-adjust: exact;
-        }
-      }
-      pre { font-family: ${fontFamily}; }
-    `,
-    onAfterPrint: () => {
-      if (onAfterAutoPrint) onAfterAutoPrint();
-    },
-  });
-
   const calculateDuration = () => {
     const start = new Date(booking.startTime);
     const end = new Date(booking.endTime);
@@ -142,7 +112,9 @@ export function PrintBill({
 
   const calculateDeskCost = () => {
     if (booking.comboPackage) {
-      return booking.comboPackage.price;
+      const base = booking.comboPackage.price;
+      const guests = booking.comboPackage.guestCount ?? 1;
+      return booking.comboPackage.pricePerPerson ? base * guests : base;
     }
     const duration = parseFloat(calculateDuration());
     return duration * deskHourlyRate;
@@ -191,18 +163,22 @@ export function PrintBill({
   const itemsTotal = calculateItemsTotal();
   const duration = calculateDuration();
   const subtotal = deskCost + itemsTotal;
-  const discountValue = (subtotal * discountPercent) / 100;
+  const discountValueRaw =
+    discountAmount > 0 ? discountAmount : (subtotal * discountPercent) / 100;
+  const discountValue = Math.min(discountValueRaw, subtotal);
   const vatValue = ((subtotal - discountValue) * vatPercent) / 100;
   const grandTotal = subtotal - discountValue + vatValue;
   const allItems = getAllItems();
   const receiptItems: ReceiptItem[] = [];
 
   if (booking.comboPackage) {
+    const guests = booking.comboPackage.guestCount ?? 1;
+    const isPerPerson = booking.comboPackage.pricePerPerson ?? false;
     receiptItems.push({
       name: `Gói: ${booking.comboPackage.name}`,
-      quantity: "1",
+      quantity: isPerPerson ? guests.toString() : "1",
       unitPrice: formatVnd(booking.comboPackage.price),
-      total: formatVnd(booking.comboPackage.price),
+      total: formatVnd(deskCost),
     });
   } else {
     receiptItems.push({
@@ -242,67 +218,37 @@ export function PrintBill({
     note: "Gọi thêm món: quét mã",
   };
 
-  React.useEffect(() => {
-    if (autoPrint && canPrint) {
-      setTimeout(() => {
-        try {
-          handlePrint?.();
-        } catch (e) {
-          // ignore print errors
-        }
-      }, 250);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPrint, canPrint]);
+  const receiptData = {
+    storeName: "",
+    storeSubtitle: storeInfo.subtitle,
+    storeAddress: storeInfo.address,
+    invoiceNumber: resolvedInvoiceNumber,
+    orderCode: `#${booking._id.slice(-5).toUpperCase()}`,
+    cashier: cashierName,
+    table: `Bàn ${booking.deskNumber}`,
+    date: formatDate(invoiceDate),
+    timeIn: formatTime(booking.startTime),
+    timeOut: formatTime(booking.endTime),
+    items: receiptItems.map((it) => ({
+      name: it.name,
+      qty: it.quantity,
+      price: it.total,
+    })),
+    subtotal: formatVnd(subtotal),
+    total: formatVnd(grandTotal),
+    footerNote: resolvedFooter.note || undefined,
+    openDrawer: true,
+    logoUrl: "/bill-logo.png",
+    logoWidth: 320,
+  };
 
   return (
     <>
-      <Button onClick={handlePrint} className={className} variant="outline">
-        <Printer className="w-4 h-4 mr-2" />
-        In Hóa Đơn
-      </Button>
-
-      <div
-        style={{
-          visibility: "hidden",
-          position: "absolute",
-          left: -9999,
-          top: 0,
-        }}
-      >
-        <div ref={componentRef} className={beVietnamPro.className}>
-          <div style={{ width: "58mm", margin: "0 auto" }}>
-            <Receipt58mm
-              variant="print"
-              brand={resolvedBrand}
-              title="HÓA ĐƠN THANH TOÁN"
-              invoiceNumber={resolvedInvoiceNumber}
-              meta={{
-                orderCode: `#${booking._id.slice(-5).toUpperCase()}`,
-                cashier: cashierName,
-                table: `Bàn ${booking.deskNumber}`,
-                date: formatDate(invoiceDate),
-                timeIn: formatTime(booking.startTime),
-                timeOut: formatTime(booking.endTime),
-              }}
-              items={receiptItems}
-              itemCount={allItems.length}
-              totals={{
-                subtotal: formatVnd(subtotal),
-                total: formatVnd(grandTotal),
-                paymentLabel: "+Thanh toán tiền mặt",
-                paymentAmount: formatVnd(cashGiven ?? grandTotal),
-                cashReceived: cashGiven ? formatVnd(cashGiven) : undefined,
-                changeDue: changeDue ? formatVnd(changeDue) : undefined,
-              }}
-              footer={resolvedFooter}
-            />
-          </div>
-          {showDebugInfo ? (
-            <div className="mt-2 text-[10px] text-black">58mm</div>
-          ) : null}
-        </div>
-      </div>
+      <BluetoothPrintButton
+        className={className}
+        label="In hóa đơn"
+        receiptData={receiptData}
+      />
     </>
   );
 }

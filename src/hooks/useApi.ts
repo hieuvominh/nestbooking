@@ -108,18 +108,19 @@ export async function apiCallStandalone<T>(
   });
 
   if (!response.ok) {
+    let errorMessage = response.statusText || 'An error occurred';
     try {
       const error = await response.json();
-      throw new Error(error?.error || error?.message || response.statusText || 'An error occurred');
-    } catch (e) {
-      // Response had no JSON body — include raw text for debugging
+      errorMessage = error?.error || error?.message || errorMessage;
+    } catch {
       try {
         const text = await response.text();
-        throw new Error(text || response.statusText || 'An error occurred');
-      } catch (e2) {
-        throw new Error(response.statusText || 'An error occurred');
+        if (text) errorMessage = text;
+      } catch {
+        // ignore — body already consumed or unavailable
       }
     }
+    throw new Error(errorMessage);
   }
 
   try {

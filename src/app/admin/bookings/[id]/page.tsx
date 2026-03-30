@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas as QRCode } from "qrcode.react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PrintBill } from "@/components/PrintBill";
+import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
 import { formatCurrency } from "@/lib/currency";
 
 interface Booking {
@@ -52,8 +54,12 @@ interface Booking {
     email: string;
     phone: string;
   };
-  deskId: string;
-  deskNumber: number;
+  deskId: {
+    _id: string;
+    label: string;
+    location: string;
+    hourlyRate: number;
+  };
   startTime: string;
   endTime: string;
   status: "confirmed" | "checked-in" | "completed" | "cancelled";
@@ -128,13 +134,16 @@ interface OrdersResponse {
 export default function BookingDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const bookingId = params.id as string;
 
   const [selectedItem, setSelectedItem] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
-  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(null);
+  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(
+    null,
+  );
   const shortCodeRequestedRef = useRef<string | null>(null);
 
   // Cart state for multiple items
@@ -168,6 +177,10 @@ export default function BookingDetailPage() {
 
   const orders = ordersResponse?.orders || [];
 
+  const ordersTotal = useMemo(() => {
+    return orders.reduce((sum, order) => sum + order.total, 0);
+  }, [orders]);
+
   // Auto-generate token if booking exists and doesn't have a valid token or short code
   useEffect(() => {
     const isTokenValid = (token: string) => {
@@ -181,13 +194,18 @@ export default function BookingDetailPage() {
     };
 
     if (booking && booking.status !== "cancelled") {
-      const hasShortCode = Boolean(shortCodeOverride || booking.publicShortCode);
+      const hasShortCode = Boolean(
+        shortCodeOverride || booking.publicShortCode,
+      );
       const hasValidToken =
         hasShortCode ||
         (booking.publicToken && isTokenValid(booking.publicToken)) ||
         (booking.signature && isTokenValid(booking.signature));
 
-      if ((!hasValidToken || !hasShortCode) && shortCodeRequestedRef.current !== bookingId) {
+      if (
+        (!hasValidToken || !hasShortCode) &&
+        shortCodeRequestedRef.current !== bookingId
+      ) {
         shortCodeRequestedRef.current = bookingId;
         generateNewToken();
       }
@@ -240,10 +258,10 @@ export default function BookingDetailPage() {
 
   const generateNewToken = async () => {
     try {
-      const data = await apiCall<{ publicShortCode?: string; publicUrl?: string }>(
-        `/api/bookings/${bookingId}/generate-token`,
-        { method: "POST" }
-      );
+      const data = await apiCall<{
+        publicShortCode?: string;
+        publicUrl?: string;
+      }>(`/api/bookings/${bookingId}/generate-token`, { method: "POST" });
       if (data?.publicShortCode) {
         setShortCodeOverride(data.publicShortCode);
       }
@@ -287,7 +305,7 @@ export default function BookingDetailPage() {
 
     // Check if item already in cart
     const existingItemIndex = cart.findIndex(
-      (cartItem) => cartItem.itemId === selectedItem
+      (cartItem) => cartItem.itemId === selectedItem,
     );
 
     if (existingItemIndex >= 0) {
@@ -325,8 +343,8 @@ export default function BookingDetailPage() {
 
     setCart(
       cart.map((item) =>
-        item.itemId === itemId ? { ...item, quantity: newQuantity } : item
-      )
+        item.itemId === itemId ? { ...item, quantity: newQuantity } : item,
+      ),
     );
   };
 
@@ -373,17 +391,24 @@ export default function BookingDetailPage() {
     }
   };
 
-  const handleStatusChange = async (orderId: string, newStatus: string) => {
+  /**
+   * Mark an order as delivered (triggers shift stock deduction on backend)
+   * Returns true on success so caller can trigger print
+   */
+  const handleCompleteOrder = async (orderId: string): Promise<boolean> => {
     try {
       await apiCall(`/api/orders/${orderId}`, {
         method: "PUT",
-        body: { status: newStatus },
+        body: { status: "delivered" },
       });
       mutateOrders();
-      toast.success("Đã cập nhật trạng thái đơn hàng thành công!");
-    } catch (error) {
-      console.error("Error updating order status:", error);
-      toast.error("Không thể cập nhật trạng thái đơn hàng");
+      toast.success("Đã hoàn thành đơn hàng!");
+      return true;
+    } catch (error: any) {
+      const msg =
+        error?.message || "Không thể hoàn thành đơn — kiểm tra kho ca";
+      toast.error(msg);
+      return false;
     }
   };
 
@@ -413,13 +438,10 @@ export default function BookingDetailPage() {
   const getOrderStatusColor = (status: string) => {
     switch (status) {
       case "pending":
-        return "text-yellow-600 bg-yellow-100";
       case "confirmed":
-        return "text-blue-600 bg-blue-100";
       case "preparing":
-        return "text-orange-600 bg-orange-100";
       case "ready":
-        return "text-green-600 bg-green-100";
+        return "text-yellow-600 bg-yellow-100";
       case "delivered":
         return "text-gray-600 bg-gray-100";
       case "cancelled":
@@ -453,7 +475,10 @@ export default function BookingDetailPage() {
 
   const publicUrl = generatePublicUrl();
   const hasValidToken = Boolean(
-    shortCodeOverride || booking?.publicShortCode || booking?.publicToken || booking?.signature
+    shortCodeOverride ||
+    booking?.publicShortCode ||
+    booking?.publicToken ||
+    booking?.signature,
   );
 
   return (
@@ -472,7 +497,7 @@ export default function BookingDetailPage() {
         </div>
         <div className="flex gap-2">
           {/* Print Bill Button - Only visible when payment is completed */}
-          <PrintBill booking={booking} orders={orders} deskHourlyRate={5} />
+          {/* <PrintBill booking={booking} orders={[]} deskHourlyRate={5} cashierName={user?.name || user?.email || "Thu ngan"} /> */}
           <Button
             onClick={() => router.push(`/admin/billing/${bookingId}`)}
             className="bg-green-600 hover:bg-green-700"
@@ -529,7 +554,7 @@ export default function BookingDetailPage() {
               <div>
                 <Label className="text-sm font-medium text-gray-500">Bàn</Label>
                 <p className="text-lg font-semibold">
-                  Bàn {booking.deskNumber}
+                  Bàn {booking.deskId.label}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -558,7 +583,7 @@ export default function BookingDetailPage() {
                         handleBookingStatusChange(e.target.value)
                       }
                       className={`w-full px-3 py-2 rounded-md text-sm font-medium border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${getStatusColor(
-                        booking.status
+                        booking.status,
                       )}`}
                     >
                       <option value="confirmed">Đã Xác Nhận</option>
@@ -598,18 +623,35 @@ export default function BookingDetailPage() {
               <CardTitle>Thông Tin Thanh Toán</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium text-gray-500">
-                    Tổng Cộng
+                    Đặt bàn
                   </Label>
-                  <p className="text-lg font-bold">
+                  <p className="text-base font-semibold">
                     {formatCurrency(booking.totalAmount ?? 0)}
                   </p>
                 </div>
-                <div>
+                <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium text-gray-500">
-                    Trạng Thái Thanh Toán
+                    Dịch vụ thêm
+                  </Label>
+                  <p className="text-base font-semibold">
+                    {formatCurrency(ordersTotal)}
+                  </p>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-gray-500">
+                    Tổng
+                  </Label>
+                  <p className="text-lg font-bold">
+                    {formatCurrency((booking.totalAmount ?? 0) + ordersTotal)}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-gray-500">
+                    Trạng thái thanh toán
                   </Label>
                   <div className="mt-1">
                     <Badge
@@ -825,14 +867,14 @@ export default function BookingDetailPage() {
                                       onChange={(e) =>
                                         updateCartItemQuantity(
                                           cartItem.itemId,
-                                          parseInt(e.target.value) || 1
+                                          parseInt(e.target.value) || 1,
                                         )
                                       }
                                       className="w-20"
                                     />
                                     <div className="text-sm font-medium w-16 text-right">
                                       {formatCurrency(
-                                        cartItem.price * cartItem.quantity
+                                        cartItem.price * cartItem.quantity,
                                       )}
                                     </div>
                                     <Button
@@ -906,22 +948,20 @@ export default function BookingDetailPage() {
                             {formatDateTime(order.createdAt)}
                           </p>
                         </div>
-                        <select
-                          value={order.status}
-                          onChange={(e) =>
-                            handleStatusChange(order._id, e.target.value)
-                          }
-                          className={`px-2 py-1 rounded-full text-xs font-medium border-0 ${getOrderStatusColor(
-                            order.status
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
+                            order.status === "delivered" ||
+                              order.status === "cancelled"
+                              ? order.status
+                              : "pending",
                           )}`}
                         >
-                          <option value="pending">Chờ</option>
-                          <option value="confirmed">Đã Xác Nhận</option>
-                          <option value="preparing">Đang Chuẩn Bị</option>
-                          <option value="ready">Sẵn Sàng</option>
-                          <option value="delivered">Đã Giao</option>
-                          <option value="cancelled">Đã Hủy</option>
-                        </select>
+                          {order.status === "delivered"
+                            ? "Đã Giao"
+                            : order.status === "cancelled"
+                              ? "Đã Hủy"
+                              : "Chờ"}
+                        </span>
                       </div>
                       <div className="space-y-2">
                         {order.items.map((item, index) => (
@@ -937,12 +977,74 @@ export default function BookingDetailPage() {
                             </span>
                           </div>
                         ))}
+                        {order.notes && (
+                          <div className="rounded-md bg-amber-50 border border-amber-100 p-2 text-xs text-amber-800">
+                            <span className="font-semibold">Lời nhắn:</span>{" "}
+                            {order.notes}
+                          </div>
+                        )}
                       </div>
                       <Separator className="my-2" />
                       <div className="flex justify-between font-semibold">
                         <span>Tổng</span>
                         <span>{formatCurrency(order.total)}</span>
                       </div>
+
+                      {/* Complete & Print button for pending orders */}
+                      {order.status !== "delivered" &&
+                        order.status !== "cancelled" && (
+                          <div className="mt-3 pt-3 border-t">
+                            <BluetoothPrintButton
+                              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0 shadow-sm hover:from-emerald-700 hover:to-teal-700"
+                              label="Hoàn thành & In bill"
+                              onBeforePrint={() =>
+                                handleCompleteOrder(order._id)
+                              }
+                              receiptData={{
+                                storeName: "Nest Study Space",
+                                invoiceNumber: order._id
+                                  .slice(-6)
+                                  .toUpperCase(),
+                                orderCode: `#${order._id.slice(-5).toUpperCase()}`,
+                                cashier: user?.name || "Nhân viên",
+                                table: `Bàn ${booking.deskId.label}`,
+                                date: new Date(
+                                  order.orderedAt,
+                                ).toLocaleDateString("vi-VN"),
+                                timeIn: new Date(
+                                  order.orderedAt,
+                                ).toLocaleTimeString("vi-VN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }),
+                                timeOut: new Date().toLocaleTimeString(
+                                  "vi-VN",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                ),
+                                items: order.items.map((item) => ({
+                                  name: item.name,
+                                  qty: String(item.quantity),
+                                  price:
+                                    Number(item.subtotal).toLocaleString(
+                                      "vi-VN",
+                                    ) + "đ",
+                                })),
+                                subtotal:
+                                  Number(order.total).toLocaleString("vi-VN") +
+                                  "đ",
+                                total:
+                                  Number(order.total).toLocaleString("vi-VN") +
+                                  "đ",
+                                footerNote: "Phiếu giao hàng",
+                                logoUrl: "/bill-logo.png",
+                                logoWidth: 320,
+                              }}
+                            />
+                          </div>
+                        )}
                     </div>
                   ))}
                 </div>

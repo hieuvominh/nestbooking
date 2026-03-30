@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICustomerInfo {
-  name: string;
+  name?: string;
   email?: string;
   phone?: string;
 }
@@ -14,6 +14,10 @@ export interface IBooking extends Document {
   endTime: Date;
   status: 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
   totalAmount: number;
+  subtotalAmount?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  promoCode?: string;
   paymentStatus: 'pending' | 'paid' | 'refunded';
   publicToken?: string;
   publicShortCode?: string;
@@ -23,6 +27,7 @@ export interface IBooking extends Document {
   // Combo support
   comboId?: mongoose.Types.ObjectId | any;
   isComboBooking?: boolean;
+  guestCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,8 +35,9 @@ export interface IBooking extends Document {
 const CustomerInfoSchema = new Schema<ICustomerInfo>({
   name: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
+    default: "",
   },
   email: {
     type: String,
@@ -77,6 +83,26 @@ const BookingSchema = new Schema<IBooking>(
       required: true,
       min: 0,
     },
+    subtotalAmount: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    discountPercent: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    discountAmount: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    promoCode: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'refunded'],
@@ -105,6 +131,11 @@ const BookingSchema = new Schema<IBooking>(
     isComboBooking: {
       type: Boolean,
       default: false,
+    },
+    guestCount: {
+      type: Number,
+      min: 1,
+      default: undefined,
     },
     checkedInAt: {
       type: Date,

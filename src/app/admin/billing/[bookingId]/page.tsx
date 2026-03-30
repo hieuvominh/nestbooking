@@ -31,8 +31,9 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PrintBill } from "@/components/PrintBill";
-import { formatCurrency } from "@/lib/currency";
+import { useAuth } from "@/contexts/AuthContext";
+import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
+import { formatCurrency, normalizeVndAmount } from "@/lib/currency";
 
 // TypeScript Interfaces
 interface Booking {
@@ -65,8 +66,10 @@ interface Booking {
     name: string;
     price: number;
     duration: number;
+    pricePerPerson?: boolean;
   };
   isComboBooking?: boolean;
+  guestCount?: number;
 }
 
 interface OrderItem {
@@ -84,6 +87,7 @@ interface OrderItem {
 interface Order {
   _id: string;
   bookingId: string;
+  isComboOrder?: boolean;
   items: OrderItem[];
   total: number;
   status:
@@ -124,6 +128,7 @@ interface CartItem {
 
 export default function BillingPage() {
   const params = useParams();
+  const { user } = useAuth();
   const router = useRouter();
   const bookingId = params.bookingId as string;
 
@@ -139,11 +144,11 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddingOrder, setIsAddingOrder] = useState(false);
 
-  const [triggerPrint, setTriggerPrint] = useState(false);
   const prevOrderCountRef = useRef<number | null>(null);
-  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(null);
+  const [shortCodeOverride, setShortCodeOverride] = useState<string | null>(
+    null,
+  );
   const shortCodeRequestedRef = useRef<string | null>(null);
-  const printPendingRef = useRef(false);
 
   // Fetch booking data
   const {
@@ -172,24 +177,30 @@ export default function BillingPage() {
   const inventoryCacheRef = useRef<Record<string, InventoryItem | null>>({});
 
   const orders = ordersResponse?.orders || [];
+  const billableOrders = useMemo(
+    () => orders.filter((o) => !o.isComboOrder),
+    [orders],
+  );
 
   const publicQrValue = useMemo(() => {
     if (typeof window === "undefined") return "";
     const code = shortCodeOverride || booking?.publicShortCode;
     if (code) return `${window.location.origin}/q/${code}`;
-    if (booking?.publicToken) return `${window.location.origin}/p/${bookingId}?t=${booking.publicToken}`;
+    if (booking?.publicToken)
+      return `${window.location.origin}/p/${bookingId}?t=${booking.publicToken}`;
     return "";
-  }, [shortCodeOverride, booking?.publicShortCode, booking?.publicToken, bookingId]);
+  }, [
+    shortCodeOverride,
+    booking?.publicShortCode,
+    booking?.publicToken,
+    bookingId,
+  ]);
 
   useEffect(() => {
     const count = orders.length;
     if (prevOrderCountRef.current === null) {
       prevOrderCountRef.current = count;
       return;
-    }
-    if (count > prevOrderCountRef.current && booking?.paymentStatus === "paid") {
-      printPendingRef.current = true;
-      handleGenerateShortCode(true);
     }
     prevOrderCountRef.current = count;
   }, [orders.length, booking?.paymentStatus]);
@@ -203,9 +214,10 @@ export default function BillingPage() {
       if (shortCodeRequestedRef.current === bookingId) return;
       shortCodeRequestedRef.current = bookingId;
       try {
-        const data = await apiCall<{ publicShortCode?: string }>(`/api/bookings/${bookingId}/generate-token`, {
-          method: "POST",
-        });
+        const data = await apiCall<{ publicShortCode?: string }>(
+          `/api/bookings/${bookingId}/generate-token`,
+          { method: "POST" },
+        );
         if (data?.publicShortCode) {
           setShortCodeOverride(data.publicShortCode);
         }
@@ -215,28 +227,31 @@ export default function BillingPage() {
       }
     };
     ensureShortCode();
-  }, [booking?._id, booking?.publicShortCode, booking?.status, shortCodeOverride, apiCall, bookingId, mutateBooking]);
+  }, [
+    booking?._id,
+    booking?.publicShortCode,
+    booking?.status,
+    shortCodeOverride,
+    apiCall,
+    bookingId,
+    mutateBooking,
+  ]);
 
   const handleGenerateShortCode = async (autoPrintAfter = false) => {
     if (!booking || booking.status === "cancelled") return;
     try {
       const data = await apiCall<{ publicShortCode?: string }>(
         `/api/bookings/${bookingId}/generate-token`,
-        { method: "POST" }
+        { method: "POST" },
       );
       if (data?.publicShortCode) {
         setShortCodeOverride(data.publicShortCode);
         if (!autoPrintAfter) {
-          toast.success("Đã tạo mã QR ngắn");
-        }
-        if (autoPrintAfter && printPendingRef.current) {
-          // allow state to flush before printing
-          setTimeout(() => setTriggerPrint(true), 100);
-          printPendingRef.current = false;
+          toast.success("?? t?o m? QR ng?n");
         }
       } else {
         if (!autoPrintAfter) {
-          toast.error("Không tạo được mã QR ngắn");
+          toast.error("Kh?ng t?o ???c m? QR ng?n");
         }
       }
       mutateBooking();
@@ -263,35 +278,64 @@ export default function BillingPage() {
    * - If combo booking: use combo fixed price (ignore hourly rate)
    * - If regular booking: duration × hourly rate
    */
+
+  // Derive effective guest count: prefer stored value, fallback to totalAmount/comboPrice
+  const effectiveGuestCount = useMemo(() => {
+    if (!booking) return 1;
+    if (booking.guestCount && booking.guestCount >= 1)
+      return booking.guestCount;
+    // For per-person combos created before guestCount was stored, derive from totalAmount
+    const combo = comboDetails || (booking.comboId as any);
+    if (booking.isComboBooking && combo?.pricePerPerson && combo?.price > 0) {
+      const derived = Math.round(
+        normalizeVndAmount(booking.totalAmount) /
+          normalizeVndAmount(combo.price),
+      );
+      return derived >= 1 ? derived : 1;
+    }
+    return 1;
+  }, [booking, comboDetails]);
+
   const deskCost = useMemo(() => {
     if (!booking) return 0;
 
     // Check if this is a combo booking
     const combo = comboDetails || (booking.comboId as any);
     if (booking.comboId || booking.isComboBooking) {
-      return (combo && combo.price) || 0;
+      const comboPrice = combo && combo.price != null ? combo.price : undefined;
+      if (comboPrice != null) {
+        const base = normalizeVndAmount(comboPrice);
+        const isPerPerson = combo.pricePerPerson ?? false;
+        return isPerPerson ? base * effectiveGuestCount : base;
+      }
+      return normalizeVndAmount(booking.totalAmount);
     }
 
     // Regular desk booking - calculate based on hourly rate
-    return Math.ceil(bookingDuration * booking.deskId.hourlyRate);
-  }, [booking, bookingDuration]);
+    return Math.ceil(
+      bookingDuration * normalizeVndAmount(booking.deskId.hourlyRate),
+    );
+  }, [booking, bookingDuration, effectiveGuestCount]);
 
   // Calculate total orders cost
   const ordersTotal = useMemo(() => {
-    return orders.reduce((sum, order) => sum + order.total, 0);
-  }, [orders]);
+    return billableOrders.reduce(
+      (sum, order) => sum + normalizeVndAmount(order.total),
+      0,
+    );
+  }, [billableOrders]);
 
   // Flattened list of order items for detailed display
   const orderItemsFlattened = useMemo(() => {
-    return orders.flatMap((o) =>
+    return billableOrders.flatMap((o) =>
       o.items.map((it) => ({
         name: it.name,
-        price: it.price,
+        price: normalizeVndAmount(it.price),
         quantity: it.quantity,
-        subtotal: it.subtotal,
-      }))
+        subtotal: normalizeVndAmount(it.subtotal),
+      })),
     );
-  }, [orders]);
+  }, [billableOrders]);
 
   // Combo included items - normalized and enriched (async fetch when entries are ids)
   const [comboIncludedItems, setComboIncludedItems] = useState<
@@ -356,7 +400,7 @@ export default function BillingPage() {
         if (it.name || it.price) {
           return {
             name: it.name,
-            price: Number(it.price ?? 0) || 0,
+            price: normalizeVndAmount(it.price ?? 0),
             quantity: Number(it.quantity ?? it.qty ?? 1) || 1,
           };
         }
@@ -367,12 +411,12 @@ export default function BillingPage() {
       // fetch missing ids (skip ones already cached)
       const fetchedById: Record<string, any> = {};
       const idsToActuallyFetch = idsToFetch.filter(
-        (id) => !inventoryCacheRef.current[id]
+        (id) => !inventoryCacheRef.current[id],
       );
       if (idsToActuallyFetch.length > 0) {
         try {
           const promises = idsToActuallyFetch.map((id) =>
-            apiCall<InventoryItem>(`/api/inventory/${id}`).catch(() => null)
+            apiCall<InventoryItem>(`/api/inventory/${id}`).catch(() => null),
           );
           const results = await Promise.all(promises);
           results.forEach((r, i) => {
@@ -395,22 +439,27 @@ export default function BillingPage() {
       });
 
       // build final list
+      const guestCount = effectiveGuestCount;
       const final = entries.map((e: any) => {
         if (e.name)
-          return { name: e.name, price: e.price, quantity: e.quantity };
+          return {
+            name: e.name,
+            price: e.price,
+            quantity: e.quantity * guestCount,
+          };
         if (e.id && fetchedById[e.id]) {
           const item = fetchedById[e.id];
           return {
             name: item.name || `Item ${String(item._id).slice(-6)}`,
-            price: Number(item.price ?? 0) || 0,
-            quantity: Number(e.quantity ?? e.qty ?? 1) || 1,
+            price: normalizeVndAmount(item.price ?? 0),
+            quantity: (Number(e.quantity ?? e.qty ?? 1) || 1) * guestCount,
           };
         }
         if (e.id)
           return {
             name: `Item ${String(e.id).slice(-6)}`,
             price: 0,
-            quantity: Number(e.quantity ?? 1) || 1,
+            quantity: (Number(e.quantity ?? 1) || 1) * guestCount,
           };
         if (e._raw && typeof e._raw === "object") {
           // try to stringify minimal info
@@ -421,14 +470,31 @@ export default function BillingPage() {
             String(e._raw);
           return {
             name: asName,
-            price: Number(e._raw.price ?? 0) || 0,
-            quantity: Number(e._raw.quantity ?? e._raw.qty ?? 1) || 1,
+            price: normalizeVndAmount(e._raw.price ?? 0),
+            quantity:
+              (Number(e._raw.quantity ?? e._raw.qty ?? 1) || 1) * guestCount,
           };
         }
-        return { name: "Unknown item", price: 0, quantity: 1 };
+        return { name: "Unknown item", price: 0, quantity: guestCount };
       });
 
-      if (!cancelled) setComboIncludedItems(final);
+      if (!cancelled) {
+        setComboIncludedItems((prev) => {
+          const isSame =
+            prev.length === final.length &&
+            prev.every((item, index) => {
+              const next = final[index];
+              return (
+                next &&
+                item.name === next.name &&
+                item.price === next.price &&
+                item.quantity === next.quantity
+              );
+            });
+
+          return isSame ? prev : final;
+        });
+      }
     };
 
     enrich();
@@ -436,51 +502,13 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [comboDetails, booking?.comboId, apiCall]);
-
-  // Aggregate combo included items and order items by name (sum quantities)
-  const aggregatedItems = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; quantity: number; total: number }
-    >();
-
-    // add combo items first (these are part of the package)
-    comboIncludedItems.forEach((it) => {
-      const key = (it.name || "").trim();
-      const existing = map.get(key);
-      const lineTotal = (it.price || 0) * (it.quantity || 1);
-      if (existing) {
-        existing.quantity += it.quantity;
-        existing.total += lineTotal;
-      } else {
-        map.set(key, {
-          name: key || "Gói item",
-          quantity: it.quantity || 1,
-          total: lineTotal,
-        });
-      }
-    });
-
-    // add order items
-    orderItemsFlattened.forEach((it) => {
-      const key = (it.name || "").trim();
-      const existing = map.get(key);
-      const lineTotal = it.subtotal || (it.price || 0) * (it.quantity || 1);
-      if (existing) {
-        existing.quantity += it.quantity;
-        existing.total += lineTotal;
-      } else {
-        map.set(key, {
-          name: key || "Mặt hàng",
-          quantity: it.quantity || 1,
-          total: lineTotal,
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  }, [comboIncludedItems, orderItemsFlattened]);
+  }, [
+    comboDetails,
+    booking?.comboId,
+    booking?.guestCount,
+    effectiveGuestCount,
+    apiCall,
+  ]);
 
   // Calculate subtotal (desk/combo + orders)
   const subtotal = useMemo(() => {
@@ -498,6 +526,10 @@ export default function BillingPage() {
   const finalTotal = useMemo(() => {
     return Math.max(0, subtotal - calculatedDiscount);
   }, [subtotal, calculatedDiscount]);
+
+  const appliedDiscount = useMemo(() => {
+    return Math.min(calculatedDiscount, subtotal);
+  }, [calculatedDiscount, subtotal]);
 
   // Fetch combo details when booking has a comboId that's not populated
   useEffect(() => {
@@ -533,7 +565,7 @@ export default function BillingPage() {
           if (!cancelled) setComboDetails(cached);
         } else {
           const data = await apiCall<InventoryItem>(
-            `/api/inventory/${comboIdStr}`
+            `/api/inventory/${comboIdStr}`,
           );
           if (!cancelled) {
             setComboDetails(data || null);
@@ -599,7 +631,11 @@ export default function BillingPage() {
         method: "PATCH",
         body: {
           paymentStatus: "paid",
-          totalAmount: finalTotal, // Update total if discount was applied
+          totalAmount: finalTotal, // Final total after discount
+          subtotalAmount: subtotal,
+          discountPercent: discountPercent,
+          discountAmount: appliedDiscount,
+          promoCode: promoCode || undefined,
         },
       });
       mutateBooking();
@@ -612,21 +648,11 @@ export default function BillingPage() {
     }
   };
 
-  // Trigger print when payment completes
-
-  // Ensure we trigger print when booking status flips to 'paid' (after mutateBooking finishes)
-  useEffect(() => {
-    if (booking && booking.paymentStatus === "paid") {
-      printPendingRef.current = true;
-      handleGenerateShortCode(true);
-    }
-  }, [booking?.paymentStatus]);
-
   const handleRefund = async () => {
     if (!booking) return;
 
     const confirmed = confirm(
-      "Bạn có chắc muốn hoàn tiền cho giao dịch này không?"
+      "Bạn có chắc muốn hoàn tiền cho giao dịch này không?",
     );
     if (!confirmed) return;
 
@@ -659,7 +685,7 @@ export default function BillingPage() {
       `Hoàn tất trả phòng cho ${booking.customer.name}?
 
   Tổng cuối: ${formatCurrency(finalTotal)}
-  Trạng thái thanh toán: ${booking.paymentStatus}`
+  Trạng thái thanh toán: ${booking.paymentStatus}`,
     );
     if (!confirmed) return;
 
@@ -670,10 +696,18 @@ export default function BillingPage() {
         completedAt: string;
         totalAmount: number;
         paymentStatus?: string;
+        subtotalAmount?: number;
+        discountPercent?: number;
+        discountAmount?: number;
+        promoCode?: string;
       } = {
         status: "completed",
         completedAt: new Date().toISOString(),
         totalAmount: finalTotal, // Always update with final calculated total
+        subtotalAmount: subtotal,
+        discountPercent: discountPercent,
+        discountAmount: appliedDiscount,
+        promoCode: promoCode || undefined,
       };
 
       // If payment is pending, mark as paid
@@ -710,8 +744,15 @@ export default function BillingPage() {
     return booking.status === "confirmed" || booking.status === "checked-in";
   };
 
+  const canAdjustDiscounts = booking?.paymentStatus === "pending";
+
   // Apply promo code (placeholder logic - you can enhance this)
   const handleApplyPromo = () => {
+    if (!canAdjustDiscounts) {
+      toast.error("Đơn đã thanh toán/hoàn tiền, không thể áp dụng khuyến mãi");
+      return;
+    }
+
     const validPromoCodes: { [key: string]: number } = {
       SAVE10: 10,
       SAVE20: 20,
@@ -771,8 +812,8 @@ export default function BillingPage() {
         cart.map((cartItem) =>
           cartItem.itemId === item._id
             ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        )
+            : cartItem,
+        ),
       );
     } else {
       setCart([
@@ -804,8 +845,8 @@ export default function BillingPage() {
 
     setCart(
       cart.map((item) =>
-        item.itemId === itemId ? { ...item, quantity: newQuantity } : item
-      )
+        item.itemId === itemId ? { ...item, quantity: newQuantity } : item,
+      ),
     );
   };
 
@@ -862,6 +903,67 @@ export default function BillingPage() {
     }
   };
 
+  /**
+   * Mark an order as delivered (triggers shift stock deduction on backend)
+   * Returns true on success so caller can trigger print
+   */
+  const handleCompleteOrder = async (orderId: string): Promise<boolean> => {
+    try {
+      await apiCall(`/api/orders/${orderId}`, {
+        method: "PUT",
+        body: { status: "delivered" },
+      });
+      mutateOrders();
+      toast.success("Đã hoàn thành đơn hàng!");
+      return true;
+    } catch (error: any) {
+      const msg =
+        error?.message || "Không thể hoàn thành đơn — kiểm tra kho ca";
+      toast.error(msg);
+      return false;
+    }
+  };
+
+  /**
+   * Main bill print flow: auto-complete only orders that were created together
+   * with booking creation (not later added orders).
+   */
+  const handleBeforeMainBillPrint = async (): Promise<boolean> => {
+    if (!booking) return true;
+
+    const initialLinkedOrders = orders.filter((order) => {
+      const statusOk =
+        order.status !== "delivered" && order.status !== "cancelled";
+      const notes = String(order.notes || "").trim();
+      const isCreatedWithBooking = notes === "Items ordered with booking";
+      const isComboStockOrder = Boolean(order.isComboOrder);
+      return statusOk && (isCreatedWithBooking || isComboStockOrder);
+    });
+
+    if (initialLinkedOrders.length === 0) return true;
+
+    try {
+      for (const order of initialLinkedOrders) {
+        await apiCall(`/api/orders/${order._id}`, {
+          method: "PUT",
+          body: { status: "delivered" },
+        });
+      }
+
+      await mutateOrders();
+      toast.success(
+        `Đã hoàn thành ${initialLinkedOrders.length} đơn đi kèm lúc tạo booking/combo`,
+      );
+      return true;
+    } catch (error: any) {
+      const msg =
+        error?.message ||
+        "Không thể hoàn thành đơn đi kèm trước khi in hóa đơn";
+      toast.error(msg);
+      return false;
+    }
+  };
+
   // Loading state
   if (bookingLoading || ordersLoading) {
     return (
@@ -895,12 +997,14 @@ export default function BillingPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">Thanh toán & Hóa đơn</h1>
-            <p className="text-gray-500">Mã đặt chỗ: {bookingId.slice(-8)}</p>
+            <p className="text-gray-500">
+              Mã đặt chỗ: {bookingId.slice(-8).toUpperCase()}
+            </p>
           </div>
         </div>
         <Badge
           className={`text-lg px-4 py-2 ${getPaymentStatusColor(
-            booking.paymentStatus
+            booking.paymentStatus,
           )}`}
         >
           {booking.paymentStatus.toUpperCase()}
@@ -986,11 +1090,40 @@ export default function BillingPage() {
               {/* Desk Cost Calculation */}
               <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg">
                 <div>
-                  <p className="text-sm text-gray-600">Thuê bàn</p>
-                  <p className="text-xs text-gray-500">
-                    {bookingDuration.toFixed(2)} giờ ×{" "}
-                    {formatCurrency(booking.deskId.hourlyRate)}/giờ
-                  </p>
+                  {(() => {
+                    const combo = comboDetails || (booking.comboId as any);
+                    const isPerPerson = combo?.pricePerPerson ?? false;
+                    if (booking.isComboBooking && combo) {
+                      return isPerPerson ? (
+                        <>
+                          <p className="text-sm text-gray-600">
+                            Gói combo: {combo.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {effectiveGuestCount} khách ×{" "}
+                            {formatCurrency(normalizeVndAmount(combo.price))}
+                            /khách
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-gray-600">
+                            Gói combo: {combo.name}
+                          </p>
+                          <p className="text-xs text-gray-500">Giá cố định</p>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <p className="text-sm text-gray-600">Thuê bàn</p>
+                        <p className="text-xs text-gray-500">
+                          {bookingDuration.toFixed(2)} giờ ×{" "}
+                          {formatCurrency(booking.deskId.hourlyRate)}/giờ
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
                 <p className="text-xl font-bold text-blue-600">
                   {formatCurrency(deskCost)}
@@ -1012,7 +1145,7 @@ export default function BillingPage() {
                   <Button
                     size="sm"
                     onClick={() => setShowAddItems(true)}
-                    className="gap-2"
+                    className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm hover:from-blue-700 hover:to-indigo-700"
                   >
                     <Plus className="h-4 w-4" />
                     Thêm mặt hàng
@@ -1125,7 +1258,7 @@ export default function BillingPage() {
                                   onClick={() =>
                                     updateCartQuantity(
                                       item.itemId,
-                                      item.quantity - 1
+                                      item.quantity - 1,
                                     )
                                   }
                                 >
@@ -1142,7 +1275,7 @@ export default function BillingPage() {
                                   onClick={() =>
                                     updateCartQuantity(
                                       item.itemId,
-                                      item.quantity + 1
+                                      item.quantity + 1,
                                     )
                                   }
                                 >
@@ -1178,7 +1311,7 @@ export default function BillingPage() {
                             {isAddingOrder
                               ? "Đang thêm..."
                               : `Thêm ${cart.length} mục - ${formatCurrency(
-                                  cartTotal
+                                  cartTotal,
                                 )}`}
                           </Button>
                         </div>
@@ -1189,18 +1322,18 @@ export default function BillingPage() {
               )}
 
               {/* Existing Orders List */}
-              {orders.length === 0 ? (
+              {billableOrders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   Chưa có đơn hàng cho đặt chỗ này
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order, idx) => (
+                  {billableOrders.map((order, idx) => (
                     <div key={order._id} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <p className="font-semibold">
-                            Đơn hàng #{order._id.slice(-8)}
+                            Đơn hàng #{order._id.slice(-8).toUpperCase()}
                           </p>
                           <p className="text-sm text-gray-500">
                             {formatDateTime(order.orderedAt)}
@@ -1213,7 +1346,7 @@ export default function BillingPage() {
 
                       {/* Order Items */}
                       <div className="space-y-2">
-                        {orders.indexOf(order) === 0 && (
+                        {billableOrders.indexOf(order) === 0 && (
                           <div className="flex justify-between items-center text-sm mt-3">
                             <div className="flex-1">
                               {/* If combo booking show combo name/duration/price, otherwise show hourly desk info */}
@@ -1232,7 +1365,7 @@ export default function BillingPage() {
                                     {formatCurrency(
                                       (comboDetails && comboDetails.price) ||
                                         (booking.comboId as any)?.price ||
-                                        0
+                                        0,
                                     )}
                                   </p>
                                 </>
@@ -1252,7 +1385,7 @@ export default function BillingPage() {
                                 ? formatCurrency(
                                     (comboDetails && comboDetails.price) ||
                                       (booking.comboId as any)?.price ||
-                                      0
+                                      0,
                                   )
                                 : formatCurrency(deskCost)}
                             </p>
@@ -1295,7 +1428,8 @@ export default function BillingPage() {
 
                       {/* Order Total */}
                       {/* Order total and combo price (if combo booking) */}
-                      {booking.comboId || booking.isComboBooking ? (
+                      {(booking.comboId || booking.isComboBooking) &&
+                      idx === 0 ? (
                         (() => {
                           const comboPrice =
                             (comboDetails && comboDetails.price) ||
@@ -1315,7 +1449,7 @@ export default function BillingPage() {
                                   {formatCurrency(
                                     (comboDetails && comboDetails.price) ||
                                       (booking.comboId as any)?.price ||
-                                      0
+                                      0,
                                   )}
                                 </span>
                               </div>
@@ -1336,6 +1470,62 @@ export default function BillingPage() {
                           </span>
                         </div>
                       )}
+
+                      {/* Complete & Print button for pending orders */}
+                      {order.status !== "delivered" &&
+                        order.status !== "cancelled" && (
+                          <div className="mt-3 pt-3 border-t">
+                            <BluetoothPrintButton
+                              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0 shadow-sm hover:from-emerald-700 hover:to-teal-700"
+                              label="Hoàn thành & In bill"
+                              onBeforePrint={() =>
+                                handleCompleteOrder(order._id)
+                              }
+                              receiptData={{
+                                storeName: "",
+                                invoiceNumber: order._id
+                                  .slice(-6)
+                                  .toUpperCase(),
+                                orderCode: `#${order._id.slice(-5).toUpperCase()}`,
+                                cashier: user?.name || "Nhân viên",
+                                table: `Bàn ${booking.deskId.label}`,
+                                date: new Date(
+                                  order.orderedAt,
+                                ).toLocaleDateString("vi-VN"),
+                                timeIn: new Date(
+                                  order.orderedAt,
+                                ).toLocaleTimeString("vi-VN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }),
+                                timeOut: new Date().toLocaleTimeString(
+                                  "vi-VN",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                ),
+                                items: order.items.map((item) => ({
+                                  name: item.name,
+                                  qty: String(item.quantity),
+                                  price:
+                                    Number(item.subtotal).toLocaleString(
+                                      "vi-VN",
+                                    ) + "đ",
+                                })),
+                                subtotal:
+                                  Number(order.total).toLocaleString("vi-VN") +
+                                  "đ",
+                                total:
+                                  Number(order.total).toLocaleString("vi-VN") +
+                                  "đ",
+                                footerNote: "Phiếu giao hàng",
+                                logoUrl: "/bill-logo.png",
+                                logoWidth: 320,
+                              }}
+                            />
+                          </div>
+                        )}
                     </div>
                   ))}
                 </div>
@@ -1364,11 +1554,12 @@ export default function BillingPage() {
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     className="uppercase"
+                    disabled={!canAdjustDiscounts}
                   />
                   <Button
                     variant="outline"
                     onClick={handleApplyPromo}
-                    disabled={!promoCode}
+                    disabled={!promoCode || !canAdjustDiscounts}
                   >
                     Áp dụng
                   </Button>
@@ -1376,6 +1567,11 @@ export default function BillingPage() {
                 <p className="text-xs text-gray-500 mt-1">
                   Thử: SAVE10, SAVE20, FIRSTVISIT
                 </p>
+                {!canAdjustDiscounts && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Đơn đã chốt thanh toán, không thể chỉnh giảm giá.
+                  </p>
+                )}
               </div>
 
               <Separator />
@@ -1394,6 +1590,7 @@ export default function BillingPage() {
                   }}
                   placeholder="0"
                   className="mt-1"
+                  disabled={!canAdjustDiscounts}
                 />
               </div>
 
@@ -1409,6 +1606,7 @@ export default function BillingPage() {
                   }}
                   placeholder="0.00"
                   className="mt-1"
+                  disabled={!canAdjustDiscounts}
                 />
               </div>
             </CardContent>
@@ -1460,7 +1658,9 @@ export default function BillingPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">
-                    Orders {orders.length > 0 && `(${orders.length})`}
+                    Orders{" "}
+                    {billableOrders.length > 0 && `(${billableOrders.length})`}{" "}
+                    (thanh toán riêng)
                   </span>
                   <span className="font-medium">
                     {formatCurrency(ordersTotal)}
@@ -1472,10 +1672,14 @@ export default function BillingPage() {
                   orderItemsFlattened.length > 0) && (
                   <div className="mt-3 bg-white p-2 rounded border">
                     <div className="space-y-1">
-                      <h5 className="text-sm font-semibold mb-2">Gói combo:</h5>
-                      {aggregatedItems.map((it, i) => (
+                      {comboIncludedItems.length > 0 && (
+                        <h5 className="text-sm font-semibold mb-2">
+                          Gói combo:
+                        </h5>
+                      )}
+                      {comboIncludedItems.map((it, i) => (
                         <div
-                          key={`agg-item-${i}`}
+                          key={`combo-item-${i}`}
                           className="flex justify-between text-sm"
                         >
                           <div className="flex-1">
@@ -1485,17 +1689,22 @@ export default function BillingPage() {
                             </p>
                           </div>
                           <div className="font-medium">
-                            {formatCurrency(it.total)}
+                            {formatCurrency(
+                              normalizeVndAmount(it.price || 0) *
+                                (it.quantity || 1),
+                            )}
                           </div>
                         </div>
                       ))}
-                      <h5 className="text-sm font-semibold my-2">
-                        {" "}
-                        Mặt hàng lẻ:
-                      </h5>
+
+                      {orderItemsFlattened.length > 0 && (
+                        <h5 className="text-sm font-semibold my-2">
+                          Mặt hàng lẻ:
+                        </h5>
+                      )}
                       {orderItemsFlattened.map((it, i) => (
                         <div
-                          key={`agg-item-${i}`}
+                          key={`order-item-${i}`}
                           className="flex justify-between text-sm"
                         >
                           <div className="flex-1">
@@ -1543,7 +1752,7 @@ export default function BillingPage() {
                 {/* Check-Out Button - Shows for active bookings */}
                 {canCheckOut() && (
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-700 hover:to-indigo-700"
                     size="lg"
                     onClick={handleCheckOut}
                     disabled={isProcessingPayment}
@@ -1552,21 +1761,18 @@ export default function BillingPage() {
                     {isProcessingPayment
                       ? "Đang xử lý..."
                       : booking.paymentStatus === "pending"
-                      ? `Thanh toán`
-                      : "Check-out thành công"}
+                        ? `Thanh toán`
+                        : "Check-out thành công"}
                   </Button>
                 )}
 
                 {/* Mark as Paid - Only show if not checking out */}
                 {booking.paymentStatus === "pending" && !canCheckOut() && (
                   <Button
-                    className="w-full"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md hover:from-emerald-700 hover:to-teal-700"
                     size="lg"
                     onClick={async () => {
-                      // mark as paid, then trigger print
                       await handleMarkAsPaid();
-                      // small delay to allow mutateBooking to refresh booking -> PrintBill render
-                      setTimeout(() => setTriggerPrint(true), 300);
                     }}
                     disabled={isProcessingPayment}
                   >
@@ -1594,9 +1800,8 @@ export default function BillingPage() {
                       <span className="font-medium">Đã thanh toán</span>
                     </div>
 
-                    {/* Print Bill Button */}
+                    {/* Print (Bluetooth) */}
                     {(() => {
-                      // prepare comboPackage prop for PrintBill
                       const comboForPrint =
                         (comboDetails as any) || (booking.comboId as any);
                       const comboPackageProp =
@@ -1607,48 +1812,93 @@ export default function BillingPage() {
                               name: comboForPrint.name,
                               duration: Number(comboForPrint.duration || 0),
                               price: Number(comboForPrint.price || 0),
+                              pricePerPerson:
+                                comboForPrint.pricePerPerson ?? false,
+                              guestCount: effectiveGuestCount,
                             }
                           : undefined;
 
-                      const publicUrl = publicQrValue;
+                      const deskNum =
+                        parseInt(booking.deskId.label.replace(/\D/g, "")) || 0;
+
+                      const fmtVnd = (n: number) =>
+                        formatCurrency(normalizeVndAmount(n));
+                      const fmtDate = (s: string) =>
+                        new Date(s).toLocaleDateString("vi-VN");
+                      const fmtTime = (s: string) =>
+                        new Date(s).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+
+                      const btItems: {
+                        name: string;
+                        qty: string;
+                        price: string;
+                      }[] = [];
+
+                      // Line for desk/combo
+                      if (comboPackageProp) {
+                        const guests = comboPackageProp.guestCount ?? 1;
+                        const isPerPerson =
+                          comboPackageProp.pricePerPerson ?? false;
+                        btItems.push({
+                          name: `Goi: ${comboPackageProp.name}`,
+                          qty: isPerPerson ? guests.toString() : "1",
+                          price: fmtVnd(comboPackageProp.price),
+                        });
+                      } else {
+                        const dur =
+                          Math.abs(
+                            new Date(booking.endTime).getTime() -
+                              new Date(booking.startTime).getTime(),
+                          ) /
+                          (1000 * 60 * 60);
+                        btItems.push({
+                          name: `Ban ${deskNum} (${dur % 1 === 0 ? dur : dur.toFixed(1)}h)`,
+                          qty: "1",
+                          price: fmtVnd(deskCost),
+                        });
+                      }
+
+                      // Order items (paid items)
+                      orderItemsFlattened.forEach((it) => {
+                        btItems.push({
+                          name: it.name,
+                          qty: String(it.quantity),
+                          price: fmtVnd(it.subtotal || it.price * it.quantity),
+                        });
+                      });
+
                       return (
-                        <PrintBill
-                          autoPrint={triggerPrint}
-                          onAfterAutoPrint={() => setTriggerPrint(false)}
-                          booking={{
-                            _id: booking._id,
-                            customer: {
-                              name: booking.customer.name,
-                              phone: booking.customer.phone,
-                              email: booking.customer.email,
-                            },
-                            deskNumber:
-                              parseInt(
-                                booking.deskId.label.replace(/\D/g, "")
-                              ) || 0,
-                            startTime: booking.startTime,
-                            endTime: booking.endTime,
-                            checkedInAt: booking.checkedInAt,
-                            totalAmount: booking.totalAmount,
-                            paymentStatus: booking.paymentStatus,
-                            status: booking.status,
-                            notes: booking.notes,
-                            comboPackage: comboPackageProp,
-                          }}
-                          orders={orders}
-                          deskHourlyRate={booking.deskId.hourlyRate}
-                          className="w-full"
-                          footerInfo={{
-                            storeName: "NEST LEARNING",
-                            address: "123 Đường ABC, Quận X, TP.HCM",
-                            note: "Gọi thêm món: quét mã",
-                            qrValue: publicUrl || undefined,
-                            qrLabel: "Quét mã để gọi thêm món",
+                        <BluetoothPrintButton
+                          className="w-full bg-gradient-to-r from-slate-900 to-slate-700 text-white border-0 shadow-sm hover:from-slate-800 hover:to-slate-600"
+                          label="In hóa đơn"
+                          onBeforePrint={handleBeforeMainBillPrint}
+                          receiptData={{
+                            storeName: "",
+                            storeAddress:
+                              "DT743A Khu dan cu Phu Hong Thinh 9, Dong Hoa, TP.HCM",
+                            invoiceNumber: booking._id.slice(-6).toUpperCase(),
+                            orderCode: `#${booking._id.slice(-5).toUpperCase()}`,
+                            cashier: user?.name || user?.email || "Thu ngan",
+                            table: `Ban ${deskNum}`,
+                            date: fmtDate(booking.startTime),
+                            timeIn: fmtTime(booking.startTime),
+                            timeOut: fmtTime(booking.endTime),
+                            items: btItems,
+                            subtotal: fmtVnd(subtotal),
+                            total: fmtVnd(finalTotal),
+                            footerNote: "Goi them mon",
+                            qrLabel: "Quet ma de goi mon",
+                            qrValue: publicQrValue || undefined,
+                            logoUrl: "/bill-logo.png",
+                            logoWidth: 320,
+                            openDrawer: true,
                           }}
                         />
                       );
                     })()}
-
 
                     {!canCheckOut() && (
                       <Button

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(wc -l /e/code/bookingcoo/src/app/admin/billing/[bookingId]/page.tsx)",
+      "Bash(grep -n \"handlePrint\\\\|autoPrint\\\\|cashGiven\\\\|changeDue\\\\|drawer\\\\|PaymentMethod\" /e/code/bookingcoo/src/app/admin/billing/[bookingId]/page.tsx)",
+      "Bash(grep -r \"qrcode\\\\|QRCode\" /e/code/bookingcoo/src --include=*.ts --include=*.tsx)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

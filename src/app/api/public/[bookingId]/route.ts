@@ -39,12 +39,16 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
       return ApiResponses.notFound('Booking not found');
     }
 
+    if ((booking as any).status === 'cancelled' || (booking as any).status === 'completed') {
+      return ApiResponses.unauthorized('Booking has ended');
+    }
+
     // Don't expose sensitive information
     const publicBookingData = {
       id: (booking as any)._id,
       desk: (booking as any).deskId,
       customer: {
-        name: (booking as any).customer.name,
+        name: (booking as any).customer.name || 'Khách hàng',
         // Don't expose email/phone for privacy
       },
       startTime: (booking as any).startTime,
@@ -95,6 +99,10 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
     const booking = await Booking.findById(bookingId);
     if (!booking) {
       return ApiResponses.notFound('Booking not found');
+    }
+
+    if ((booking as any).status === 'cancelled' || (booking as any).status === 'completed') {
+      return ApiResponses.unauthorized('Booking has ended');
     }
 
     // Validate check-in conditions

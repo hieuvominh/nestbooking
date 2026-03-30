@@ -68,6 +68,7 @@ async function createInventoryItem(request: AuthenticatedRequest) {
     // normalize category values coming from clients
     const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
     const { includedItems } = body;
+    const { pricePerPerson } = body;
 
     if (!sku || !name || !category || price === undefined) {
       return ApiResponses.badRequest('SKU, name, category, and price are required');
@@ -122,6 +123,10 @@ async function createInventoryItem(request: AuthenticatedRequest) {
         return ApiResponses.badRequest('Invalid duration for combo');
       }
       itemData.duration = parsed;
+    }
+    // include pricePerPerson for combo items
+    if (category === 'combo') {
+      itemData.pricePerPerson = pricePerPerson === true;
     }
     const item = new InventoryItem(itemData);
 

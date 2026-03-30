@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: ShortParams) {
       publicShortCode: { $regex: new RegExp(`^${escaped}$`, "i") },
     }).lean();
   }
-  if (!booking || (booking as any).status === "cancelled") {
+  if (!booking || (booking as any).status === "cancelled" || (booking as any).status === "completed") {
     return new Response("Not found", { status: 404 });
   }
 

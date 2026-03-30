@@ -1,0 +1,26 @@
+import { NextRequest } from 'next/server';
+import connectDB from '@/lib/mongodb';
+import { ShiftInventory } from '@/models';
+import { ApiResponses, requireRole } from '@/lib/api-middleware';
+import { getShiftCode, getShiftDateKey } from '@/lib/shift';
+
+// GET /api/shift-inventory?dateKey=YYYY-MM-DD&shiftCode=S1
+async function getShiftInventory(request: NextRequest) {
+  try {
+    await connectDB();
+    const { searchParams } = new URL(request.url);
+    const dateKey = searchParams.get('dateKey') || getShiftDateKey();
+    const shiftCode = searchParams.get('shiftCode') || getShiftCode() || 'S1';
+
+    const items = await ShiftInventory.find({ dateKey, shiftCode })
+      .populate('itemId', 'name price category')
+      .lean();
+
+    return ApiResponses.success({ dateKey, shiftCode, items });
+  } catch (error) {
+    console.error('Get shift inventory error:', error);
+    return ApiResponses.serverError('Failed to fetch shift inventory');
+  }
+}
+
+export const GET = requireRole(['admin', 'staff'])(getShiftInventory);

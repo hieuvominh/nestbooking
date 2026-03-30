@@ -41,18 +41,18 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">BookingCoo Admin</CardTitle>
-          <CardDescription>Sign in to your admin account</CardDescription>
+          <CardTitle className="text-2xl font-bold">Nest Study Space</CardTitle>
+          <CardDescription>Đăng nhập tài khoản quản trị</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
-                Email
+                Tên đăng nhập/Email
               </label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 placeholder="admin@bookingcoo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

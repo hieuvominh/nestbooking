@@ -39,7 +39,7 @@ import {
 const bookingSchema = z
   .object({
     // Customer Info
-    customerName: z.string().min(1, "Customer name is required"),
+    customerName: z.string().optional(),
     customerPhone: z
       .string()
       .min(10, "Phone number must be at least 10 digits")
@@ -58,12 +58,7 @@ const bookingSchema = z
     endTime: z.string().min(1, "End time is required"),
 
     // Status
-    status: z.enum([
-      "confirmed",
-      "checked-in",
-      "completed",
-      "cancelled",
-    ]),
+    status: z.enum(["confirmed", "checked-in", "completed", "cancelled"]),
 
     // Payment
     paymentMethod: z.enum(["cash", "card", "transfer"]),
@@ -82,7 +77,7 @@ const bookingSchema = z
     {
       message: "End time must be after start time",
       path: ["endTime"],
-    }
+    },
   );
 
 type BookingFormData = z.infer<typeof bookingSchema>;
@@ -192,7 +187,7 @@ export function BookingEditModal({
       // Transform data to match API expectations
       const bookingData = {
         customer: {
-          name: data.customerName,
+          name: data.customerName?.trim() || undefined,
           phone: data.customerPhone,
           email: data.customerEmail || "",
         },
@@ -274,7 +269,7 @@ export function BookingEditModal({
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
                       <User className="h-4 w-4" />
-                      Customer Name *
+                      Customer Name
                     </FormLabel>
                     <FormControl>
                       <Input placeholder="Enter customer name" {...field} />
@@ -350,12 +345,20 @@ export function BookingEditModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {availableDesks.map((desk) => (
-                          <SelectItem key={desk._id} value={desk._id}>
-                            Desk {desk.number} - {desk.label} ($
-                            {desk.hourlyRate}/giờ)
-                          </SelectItem>
-                        ))}
+                        {[...availableDesks]
+                          .sort((a, b) =>
+                            (a.label || "").localeCompare(
+                              b.label || "",
+                              undefined,
+                              { numeric: true, sensitivity: "base" },
+                            ),
+                          )
+                          .map((desk) => (
+                            <SelectItem key={desk._id} value={desk._id}>
+                              B?n {desk.number} - {desk.label} (
+                              {formatCurrency(desk.hourlyRate)}/gi?)
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

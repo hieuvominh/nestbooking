@@ -1,4 +1,4 @@
-// Vietnamese translations for BookingCoo App
+// Vietnamese translations for Nest Study Space App
 // Tất cả chuỗi văn bản tiếng Việt cho ứng dụng
 
 export const vi = {

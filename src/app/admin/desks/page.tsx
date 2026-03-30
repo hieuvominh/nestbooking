@@ -5,6 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatCurrency } from "@/lib/currency";
 import {
   Card,
   CardContent,
@@ -111,7 +112,7 @@ export default function DesksPage() {
     } catch (error) {
       console.error("Error changing desk status:", error);
       alert(
-        error instanceof Error ? error.message : "Failed to change desk status"
+        error instanceof Error ? error.message : "Failed to change desk status",
       );
     }
   };
@@ -274,7 +275,7 @@ export default function DesksPage() {
                 <TableHead>Label</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Rate/Hour</TableHead>
+                <TableHead>Giá (VNĐ)</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -290,7 +291,7 @@ export default function DesksPage() {
                         handleStatusChange(desk._id, e.target.value)
                       }
                       className={`px-2 py-1 rounded-full text-xs font-medium border-0 ${getStatusColor(
-                        desk.status
+                        desk.status,
                       )}`}
                     >
                       <option value="available">Available</option>
@@ -299,7 +300,7 @@ export default function DesksPage() {
                       <option value="maintenance">Maintenance</option>
                     </select>
                   </TableCell>
-                  <TableCell>${desk.hourlyRate}/hr</TableCell>
+                  <TableCell>{formatCurrency(desk.hourlyRate)}</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"

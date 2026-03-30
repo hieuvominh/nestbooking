@@ -4,6 +4,7 @@ import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
+import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -44,6 +45,14 @@ async function getBooking(request: AuthenticatedRequest, { params }: BookingPara
       await bookingDoc.save();
     }
 
+    if (bookingDoc.status !== 'cancelled' && !bookingDoc.publicToken) {
+      const bufferMinutes = parseInt(process.env.PUBLIC_BOOKING_BUFFER_MINUTES || '30');
+      const tokenExpiry = addMinutes(bookingDoc.endTime, bufferMinutes);
+      const publicUrl = generatePublicBookingUrl(String(bookingDoc._id), tokenExpiry);
+      bookingDoc.publicToken = publicUrl.split('?t=')[1];
+      await bookingDoc.save();
+    }
+
     const booking = await Booking.findById(id)
       .populate('deskId', 'label location hourlyRate')
       .lean();
@@ -77,7 +86,12 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       endTime,
       status,
       paymentStatus,
-      notes
+      notes,
+      totalAmount,
+      subtotalAmount,
+      discountPercent,
+      discountAmount,
+      promoCode
     } = body;
 
     const booking = await Booking.findById(id);
@@ -148,19 +162,49 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
     }
 
     // Recalculate amount if needed
-    if (recalculateAmount) {
+    if (recalculateAmount && !(typeof totalAmount === 'number' && totalAmount >= 0)) {
       const desk = await Desk.findById(deskId || booking.deskId);
       const start = updateData.startTime || booking.startTime;
       const end = updateData.endTime || booking.endTime;
       const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       updateData.totalAmount = Math.ceil(durationHours * desk!.hourlyRate);
+      updateData.subtotalAmount = updateData.totalAmount;
     }
 
     // Handle other updates
-    if (customer) updateData.customer = customer;
+    if (customer) {
+      const customerName = customer?.name?.trim();
+      const cleanCustomer: any = {
+        name: customerName || 'Khách Hàng',
+      };
+      if (customer.email && customer.email.trim()) {
+        cleanCustomer.email = customer.email.trim();
+      }
+      if (customer.phone && customer.phone.trim()) {
+        cleanCustomer.phone = customer.phone.trim();
+      }
+      updateData.customer = cleanCustomer;
+    }
     if (status) updateData.status = status;
     if (paymentStatus) updateData.paymentStatus = paymentStatus;
     if (notes !== undefined) updateData.notes = notes;
+    if (typeof totalAmount === 'number' && totalAmount >= 0) {
+      updateData.totalAmount = totalAmount;
+    }
+    if (typeof subtotalAmount === 'number' && subtotalAmount >= 0) {
+      updateData.subtotalAmount = subtotalAmount;
+    }
+    if (typeof discountPercent === 'number' && discountPercent >= 0) {
+      updateData.discountPercent = discountPercent;
+    }
+    if (typeof discountAmount === 'number' && discountAmount >= 0) {
+      updateData.discountAmount = discountAmount;
+    }
+    if (promoCode !== undefined) {
+      updateData.promoCode = promoCode && String(promoCode).trim()
+        ? String(promoCode).trim()
+        : undefined;
+    }
 
     // Handle check-in
     if (status === 'checked-in' && booking.status !== 'checked-in') {
@@ -170,6 +214,7 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       updateData.completedAt = new Date();
     }
 
+
     // Update public token if times changed
     if (startTime || endTime) {
       const bufferMinutes = parseInt(process.env.PUBLIC_BOOKING_BUFFER_MINUTES || '30');
@@ -178,19 +223,54 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       updateData.publicToken = publicUrl.split('?t=')[1];
     }
 
+    // If payment is transitioning to paid and booking has combo, process combo order first
+    const isPayingNow =
+      booking.paymentStatus !== 'paid' &&
+      (updateData.paymentStatus === 'paid' || paymentStatus === 'paid');
+
+    if (isPayingNow && booking.comboId) {
+      try {
+        await ensureComboOrderForPaidBooking({
+          bookingId: booking._id.toString(),
+          comboId: String(booking.comboId),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Combo processing failed';
+        return ApiResponses.badRequest(msg);
+      }
+    }
+
     const updatedBooking = await Booking.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
     ).populate('deskId', 'label location hourlyRate');
 
-    // Update transaction if amount changed
-    if (recalculateAmount) {
-      await Transaction.findOneAndUpdate(
-        { referenceId: id, referenceModel: 'Booking' },
-        { amount: updateData.totalAmount },
-        { new: true }
-      );
+    // Update or create transaction if booking is paid
+    if (updateData.paymentStatus === 'paid' || updatedBooking?.paymentStatus === 'paid') {
+      const amountToUse =
+        typeof updateData.totalAmount === 'number'
+          ? updateData.totalAmount
+          : updatedBooking.totalAmount;
+      const existing = await Transaction.findOne({
+        referenceId: id,
+        referenceModel: 'Booking',
+        type: 'income'
+      });
+      if (existing) {
+        existing.amount = amountToUse;
+        await existing.save();
+      } else {
+        await Transaction.create({
+          type: 'income',
+          amount: amountToUse,
+          source: 'booking',
+          description: `Booking payment - ${updatedBooking.customer?.name || 'Customer'}`,
+          referenceId: updatedBooking._id,
+          referenceModel: 'Booking',
+          createdBy: request.user.userId
+        });
+      }
     }
 
     return ApiResponses.success(updatedBooking, 'Booking updated successfully');
@@ -222,6 +302,8 @@ async function cancelBooking(request: AuthenticatedRequest, { params }: BookingP
 
     // Update booking status to cancelled
     booking.status = 'cancelled';
+    booking.publicToken = undefined;
+    booking.publicShortCode = undefined;
     await booking.save();
 
     // Handle refund transaction if payment was made
@@ -230,7 +312,7 @@ async function cancelBooking(request: AuthenticatedRequest, { params }: BookingP
         type: 'expense',
         amount: booking.totalAmount,
         source: 'booking',
-        description: `Refund for cancelled booking - ${booking.customer.name}`,
+        description: `Hoàn tiền huỷ đặt chỗ - ${booking.customer.name}`,
         referenceId: booking._id,
         referenceModel: 'Booking',
         createdBy: request.user.userId

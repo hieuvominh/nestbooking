@@ -5,6 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatCurrency } from "@/lib/currency";
 import {
   Card,
   CardContent,
@@ -111,7 +112,7 @@ export default function DesksPage() {
     } catch (error) {
       console.error("Error changing desk status:", error);
       alert(
-        error instanceof Error ? error.message : "Failed to change desk status"
+        error instanceof Error ? error.message : "Failed to change desk status",
       );
     }
   };
@@ -175,19 +176,24 @@ export default function DesksPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Giá/giờ*
+                    Giá (VNĐ)*
                   </label>
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={formData.hourlyRate}
-                    onChange={(e) =>
+                    value={
+                      Number.isFinite(formData.hourlyRate)
+                        ? formData.hourlyRate
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
                       setFormData({
                         ...formData,
-                        hourlyRate: parseFloat(e.target.value),
-                      })
-                    }
+                        hourlyRate: value === "" ? 0 : parseFloat(value) || 0,
+                      });
+                    }}
                     required
                   />
                 </div>
@@ -274,7 +280,7 @@ export default function DesksPage() {
                 <TableHead>Ký hiệu</TableHead>
                 <TableHead>Vị trí</TableHead>
                 <TableHead>Trạng thái</TableHead>
-                <TableHead>Giá/giờ</TableHead>
+                <TableHead>Giá (VNĐ)</TableHead>
                 <TableHead>Hành động</TableHead>
               </TableRow>
             </TableHeader>
@@ -290,7 +296,7 @@ export default function DesksPage() {
                         handleStatusChange(desk._id, e.target.value)
                       }
                       className={`px-2 py-1 rounded-full text-xs font-medium border-0 ${getStatusColor(
-                        desk.status
+                        desk.status,
                       )}`}
                     >
                       <option value="available">Còn trống</option>
@@ -299,7 +305,7 @@ export default function DesksPage() {
                       <option value="maintenance">Bảo trì</option>
                     </select>
                   </TableCell>
-                  <TableCell>${desk.hourlyRate}/giờ</TableCell>
+                  <TableCell>{formatCurrency(desk.hourlyRate)}</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"

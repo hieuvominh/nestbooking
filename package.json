@@ -8,6 +8,7 @@
         "start": "next start",
         "lint": "eslint",
         "seed": "npx tsx scripts/seed.ts",
+        "seed:desks": "npx tsx scripts/seed-desks.ts",
         "docker:up": "docker-compose up -d",
         "docker:down": "docker-compose down",
         "docker:build": "docker-compose build"
@@ -50,11 +51,12 @@
         "@types/node": "^20",
         "@types/react": "^19",
         "@types/react-dom": "^19",
+        "@types/web-bluetooth": "^0.0.21",
+        "dotenv": "^16.1.4",
         "eslint": "^9",
         "eslint-config-next": "15.5.7",
         "tailwindcss": "^4",
         "tsx": "^4.20.6",
-        "dotenv": "^16.1.4",
         "typescript": "^5"
     }
 }

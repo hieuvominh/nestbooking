@@ -3,6 +3,8 @@ import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction, InventoryItem } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
+import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
+import { normalizeVndAmount } from '@/lib/currency';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 
 async function ensurePublicShortCode(booking: any) {
@@ -142,8 +144,13 @@ async function createBooking(request: AuthenticatedRequest) {
       status,
       paymentStatus,
       totalAmount,
+      subtotalAmount,
+      discountPercent,
+      discountAmount,
+      promoCode,
       checkedInAt,
-      comboId
+      comboId,
+      guestCount
     } = body;
 
     // Validate required fields
@@ -151,13 +158,11 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('Missing required fields');
     }
 
-    if (!customer.name) {
-      return ApiResponses.badRequest('Customer name is required');
-    }
+    const customerName = customer.name?.trim();
 
     // Clean up customer object - remove undefined values
     const cleanCustomer: any = {
-      name: customer.name.trim()
+      name: customerName || "Khách Hàng"
     };
     if (customer.email && customer.email.trim()) {
       cleanCustomer.email = customer.email.trim();
@@ -210,7 +215,10 @@ async function createBooking(request: AuthenticatedRequest) {
     // Calculate total amount (use provided value or calculate from desk rate)
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
-    const finalTotalAmount = totalAmount || calculatedAmount;
+    const normalizedTotalAmount =
+      typeof totalAmount === 'number' && totalAmount >= 0
+        ? normalizeVndAmount(totalAmount)
+        : normalizeVndAmount(calculatedAmount);
 
     const resolvedStatus =
       status || (start <= new Date() ? "checked-in" : "confirmed");
@@ -225,7 +233,20 @@ async function createBooking(request: AuthenticatedRequest) {
       customer: cleanCustomer,
       startTime: start,
       endTime: end,
-      totalAmount: finalTotalAmount,
+      totalAmount: normalizedTotalAmount,
+      subtotalAmount:
+        typeof subtotalAmount === 'number' && subtotalAmount >= 0
+          ? normalizeVndAmount(subtotalAmount)
+          : undefined,
+      discountPercent:
+        typeof discountPercent === 'number' && discountPercent >= 0
+          ? discountPercent
+          : undefined,
+      discountAmount:
+        typeof discountAmount === 'number' && discountAmount >= 0
+          ? discountAmount
+          : undefined,
+      promoCode: promoCode && String(promoCode).trim() ? String(promoCode).trim() : undefined,
       status: resolvedStatus,
       paymentStatus: resolvedPaymentStatus,
       notes
@@ -235,6 +256,9 @@ async function createBooking(request: AuthenticatedRequest) {
     if (comboId) {
       bookingData.comboId = comboId;
       bookingData.isComboBooking = true;
+      if (typeof guestCount === 'number' && guestCount >= 1) {
+        bookingData.guestCount = Math.floor(guestCount);
+      }
     }
 
     // Add checkedInAt if provided (for immediate check-ins)
@@ -248,6 +272,26 @@ async function createBooking(request: AuthenticatedRequest) {
     const booking = new Booking(bookingData);
 
     await booking.save();
+
+    // If booking is paid and uses a combo, create combo order + deduct shift stock
+    if (resolvedPaymentStatus === 'paid' && comboId) {
+      try {
+        await ensureComboOrderForPaidBooking({
+          bookingId: booking._id.toString(),
+          comboId: String(comboId),
+          guestCount: bookingData.guestCount ?? 1,
+        });
+      } catch (err) {
+        // rollback booking so we don't keep a reserved table
+        try {
+          await Booking.findByIdAndDelete(booking._id);
+        } catch (cleanupErr) {
+          console.error('Failed to rollback booking after combo error:', cleanupErr);
+        }
+        const msg = err instanceof Error ? err.message : 'Combo processing failed';
+        return ApiResponses.badRequest(msg);
+      }
+    }
 
     // If bookingData included comboId but the currently compiled Booking model
     // doesn't have that path (hot-reload mismatch), ensure the comboId is
@@ -282,14 +326,16 @@ async function createBooking(request: AuthenticatedRequest) {
     // Create transaction record
     const transaction = new Transaction({
       type: 'income',
-      amount: finalTotalAmount,
+      amount: normalizedTotalAmount,
       source: 'booking',
-      description: `Booking for desk ${desk.label} - ${cleanCustomer.name}`,
+      description: `Đặt chỗ bàn ${desk.label} - ${cleanCustomer.name || 'Khách hàng'}`,
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId
     });
-    await transaction.save();
+    if (resolvedPaymentStatus === 'paid') {
+      await transaction.save();
+    }
 
     // Try to populate desk and combo info. Some runtimes may have an older
     // compiled Booking model that doesn't include `comboId` which causes

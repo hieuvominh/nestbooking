@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
 import {
   Table,
   TableBody,
@@ -27,13 +28,16 @@ interface InventoryItem {
   description: string;
   price: number;
   stock: number;
+  quantity?: number;
   sku?: string;
   unit?: string;
+  duration?: number;
   lowStockThreshold?: number;
   includedItems?: { item: string; quantity: number }[];
   category: "food" | "drinks" | "snacks" | "supplies" | "combo";
   isAvailable: boolean;
   image?: string;
+  pricePerPerson?: boolean;
 }
 
 interface Order {
@@ -86,8 +90,13 @@ export default function InventoryPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [activeTab, setActiveTab] = useState<"inventory" | "orders">(
-    "inventory"
+    "inventory",
   );
+  const [isRestocking, setIsRestocking] = useState(false);
+  const [restockRows, setRestockRows] = useState<
+    Record<string, { quantity: string; totalCost: string; note: string }>
+  >({});
+  const [restockLoading, setRestockLoading] = useState(false);
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
@@ -101,6 +110,7 @@ export default function InventoryPage() {
     category: "food" | "drinks" | "snacks" | "supplies" | "combo";
     isAvailable: boolean;
     image: string;
+    pricePerPerson: boolean;
   }>({
     name: "",
     description: "",
@@ -114,6 +124,7 @@ export default function InventoryPage() {
     category: "food",
     isAvailable: true,
     image: "",
+    pricePerPerson: false,
   });
 
   const generateSKU = (name: string) => {
@@ -127,15 +138,37 @@ export default function InventoryPage() {
     "/api/inventory",
     {
       refreshInterval: 10000, // Poll every 10 seconds
-    }
+    },
   );
   const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>(
     "/api/orders",
     {
       refreshInterval: 5000, // Poll orders more frequently (5 seconds) for kitchen updates
-    }
+    },
   );
   const { apiCall } = useApi();
+
+  const inventoryById = useMemo(() => {
+    const map = new Map<string, InventoryItem>();
+    (inventory || []).forEach((it) => map.set(it._id, it));
+    return map;
+  }, [inventory]);
+
+  const formatComboSummary = (item: InventoryItem) => {
+    if (item.category !== "combo") return null;
+    const parts = (item.includedItems || [])
+      .map((comp) => {
+        const compItem = inventoryById.get(comp.item);
+        const name = compItem?.name || `Item ${String(comp.item).slice(-6)}`;
+        const qty = comp.quantity ? ` x${comp.quantity}` : "";
+        return `${name}${qty}`;
+      })
+      .filter(Boolean);
+    return {
+      duration: item.duration ? `${item.duration}h` : "-",
+      items: parts.length > 0 ? parts.join(", ") : "No items",
+    };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,8 +181,8 @@ export default function InventoryPage() {
           formData.category === "drinks"
             ? "beverage"
             : formData.category === "snacks"
-            ? "merchandise"
-            : formData.category,
+              ? "merchandise"
+              : formData.category,
         price: formData.price,
         quantity: formData.stock,
         lowStockThreshold: formData.lowStockThreshold,
@@ -159,6 +192,7 @@ export default function InventoryPage() {
       if (formData.category === "combo") {
         body.includedItems = formData.includedItems || [];
         if (formData.duration !== undefined) body.duration = formData.duration;
+        body.pricePerPerson = formData.pricePerPerson;
       }
 
       if (editingItem) {
@@ -202,9 +236,40 @@ export default function InventoryPage() {
     }
   };
 
+  const handleBulkRestock = async () => {
+    const entries = Object.entries(restockRows).filter(([id, v]) => {
+      const item = inventoryById.get(id);
+      if (item && ((item as any).type === "combo" || item.category === "combo"))
+        return false;
+      return parseFloat(v.quantity) > 0 && parseFloat(v.totalCost) > 0;
+    });
+    if (entries.length === 0) return;
+    setRestockLoading(true);
+    try {
+      await apiCall("/api/inventory/restock-bulk", {
+        method: "POST",
+        body: {
+          items: entries.map(([id, v]) => ({
+            id,
+            quantity: parseFloat(v.quantity),
+            cost: parseFloat(v.totalCost),
+            note: v.note || undefined,
+          })),
+        },
+      });
+      mutateInventory();
+      setIsRestocking(false);
+      setRestockRows({});
+    } catch (error) {
+      console.error("Error restocking items:", error);
+    } finally {
+      setRestockLoading(false);
+    }
+  };
+
   const handleOrderStatusUpdate = async (
     orderId: string,
-    status: Order["status"]
+    status: Order["status"],
   ) => {
     try {
       await apiCall(`/api/orders/${orderId}`, {
@@ -231,6 +296,7 @@ export default function InventoryPage() {
       category: "food",
       isAvailable: true,
       image: "",
+      pricePerPerson: false,
     });
     setIsCreating(false);
     setEditingItem(null);
@@ -250,6 +316,7 @@ export default function InventoryPage() {
       category: (item.category as any) || "food",
       isAvailable: item.isAvailable,
       image: item.image || "",
+      pricePerPerson: (item as any).pricePerPerson ?? false,
     });
     setEditingItem(item);
     setIsCreating(true);
@@ -345,15 +412,151 @@ export default function InventoryPage() {
             </button>
           </div>
           {activeTab === "inventory" && (
-            <Button onClick={() => setIsCreating(true)}>
-              Thêm mặt hàng mới
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsRestocking(true);
+                  setRestockRows({});
+                }}
+              >
+                Nhập hàng
+              </Button>
+              <Button onClick={() => setIsCreating(true)}>
+                Thêm mặt hàng mới
+              </Button>
+            </>
           )}
         </div>
       </div>
 
       {activeTab === "inventory" && (
         <>
+          {isRestocking && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Nhập hàng</CardTitle>
+                <CardDescription>
+                  Điền số lượng và chi phí cho mặt hàng cần nhập. Mặt hàng nào
+                  không điền sẽ bỏ qua.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mặt hàng</TableHead>
+                      <TableHead>Tồn kho</TableHead>
+                      <TableHead>Số lượng nhập</TableHead>
+                      <TableHead>Tổng chi phí (VND)</TableHead>
+                      <TableHead>Ghi chú</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {inventory
+                      ?.filter(
+                        (item) =>
+                          (item as any).type !== "combo" &&
+                          item.category !== "combo",
+                      )
+                      .map((item) => {
+                        const itemStock = (item as any).quantity ?? item.stock;
+                        const row = restockRows[item._id] ?? {
+                          quantity: "",
+                          totalCost: "",
+                          note: "",
+                        };
+                        return (
+                          <TableRow key={item._id}>
+                            <TableCell>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-xs text-gray-500">
+                                {translateCategory(item.category)}
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(itemStock)}`}
+                              >
+                                {itemStock}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="0"
+                                value={row.quantity}
+                                onChange={(e) =>
+                                  setRestockRows((prev) => ({
+                                    ...prev,
+                                    [item._id]: {
+                                      ...row,
+                                      quantity: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-24"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="0"
+                                value={row.totalCost}
+                                onChange={(e) =>
+                                  setRestockRows((prev) => ({
+                                    ...prev,
+                                    [item._id]: {
+                                      ...row,
+                                      totalCost: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-32"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                placeholder="Ghi chú..."
+                                value={row.note}
+                                onChange={(e) =>
+                                  setRestockRows((prev) => ({
+                                    ...prev,
+                                    [item._id]: {
+                                      ...row,
+                                      note: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-40"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+                <div className="flex gap-2 mt-4">
+                  <Button onClick={handleBulkRestock} disabled={restockLoading}>
+                    {restockLoading ? "Đang lưu..." : "Xác nhận nhập hàng"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsRestocking(false);
+                      setRestockRows({});
+                    }}
+                  >
+                    Hủy
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {isCreating && (
             <Card>
               <CardHeader>
@@ -451,10 +654,16 @@ export default function InventoryPage() {
                   </div>
 
                   {formData.category === "combo" && (
-                    <div className="mt-4 border p-3 rounded">
-                      <div className="mb-3">
+                    <div className="mt-4 border p-4 rounded bg-gray-50">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="font-medium">Combo settings</div>
+                        <div className="text-xs text-gray-500">
+                          Chọn món kèm và số lượng
+                        </div>
+                      </div>
+                      <div className="mb-4">
                         <label className="text-sm font-medium">
-                          Duration (hours)
+                          Thời lượng (giờ)
                         </label>
                         <Input
                           type="number"
@@ -471,7 +680,49 @@ export default function InventoryPage() {
                           }
                         />
                       </div>
-                      <h4 className="font-medium mb-2">Combo components</h4>
+                      <div className="mb-4 flex items-center gap-2">
+                        <input
+                          id="pricePerPerson"
+                          type="checkbox"
+                          checked={formData.pricePerPerson}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              pricePerPerson: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label
+                          htmlFor="pricePerPerson"
+                          className="text-sm font-medium"
+                        >
+                          Tính giá theo đầu người (giá × số khách)
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium">Món đi kèm</h4>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              includedItems: [
+                                ...(prev.includedItems || []),
+                                { item: "", quantity: 1 },
+                              ],
+                            }))
+                          }
+                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                        >
+                          Thêm món
+                        </button>
+                      </div>
+                      {(formData.includedItems || []).length === 0 && (
+                        <div className="text-sm text-gray-500 mb-2">
+                          Chưa có món đi kèm
+                        </div>
+                      )}
                       {(formData.includedItems || []).map((comp, idx) => (
                         <div key={idx} className="flex gap-2 items-center mb-2">
                           <select
@@ -489,10 +740,10 @@ export default function InventoryPage() {
                             }}
                             className="flex-1 p-2 border rounded"
                           >
-                            <option value="">-- select item --</option>
+                            <option value="">-- chọn món --</option>
                             {inventory
                               ?.filter(
-                                (it: any) => (it as any).type !== "combo"
+                                (it: any) => (it as any).type !== "combo",
                               )
                               .map((it: any) => (
                                 <option key={it._id} value={it._id}>
@@ -527,35 +778,17 @@ export default function InventoryPage() {
                             }}
                             className="px-2 py-1 text-sm text-red-600"
                           >
-                            Remove
+                            Xóa
                           </button>
                         </div>
                       ))}
-
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              includedItems: [
-                                ...(prev.includedItems || []),
-                                { item: "", quantity: 1 },
-                              ],
-                            }))
-                          }
-                          className="px-3 py-1 bg-blue-500 text-white rounded"
-                        >
-                          Add component
-                        </button>
-                      </div>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label htmlFor="price" className="text-sm font-medium">
-                        Giá ($)
+                        Giá (VNĐ)
                       </label>
                       <Input
                         id="price"
@@ -567,24 +800,6 @@ export default function InventoryPage() {
                           setFormData((prev) => ({
                             ...prev,
                             price: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="stock" className="text-sm font-medium">
-                        Số lượng tồn
-                      </label>
-                      <Input
-                        id="stock"
-                        type="number"
-                        min="0"
-                        value={formData.stock}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            stock: parseInt(e.target.value) || 0,
                           }))
                         }
                         required
@@ -662,6 +877,7 @@ export default function InventoryPage() {
                   <TableRow>
                     <TableHead>Mặt hàng</TableHead>
                     <TableHead>Danh mục</TableHead>
+                    <TableHead>Combo</TableHead>
                     <TableHead>Giá</TableHead>
                     <TableHead>Tồn kho</TableHead>
                     <TableHead>Trạng thái</TableHead>
@@ -670,7 +886,12 @@ export default function InventoryPage() {
                 </TableHeader>
                 <TableBody>
                   {inventory?.map((item) => {
-                    const itemStock = (item as any).quantity ?? item.stock;
+                    const isCombo =
+                      item.category === "combo" ||
+                      (item as any).type === "combo";
+                    const itemStock = isCombo
+                      ? null
+                      : ((item as any).quantity ?? item.stock);
                     return (
                       <TableRow key={item._id}>
                         <TableCell>
@@ -684,53 +905,46 @@ export default function InventoryPage() {
                         <TableCell className="capitalize">
                           {translateCategory(item.category)}
                         </TableCell>
+                        <TableCell>
+                          {item.category === "combo" ? (
+                            <div className="text-xs text-gray-600">
+                              <div>
+                                Thời lượng: {formatComboSummary(item)?.duration}
+                              </div>
+                              <div className="line-clamp-2">
+                                {formatComboSummary(item)?.items}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>{formatCurrency(item.price)}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          {isCombo ? (
+                            <span className="text-xs text-gray-400">-</span>
+                          ) : (
                             <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(
-                                itemStock
-                              )}`}
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStockColor(itemStock)}`}
                             >
                               {itemStock}
                             </span>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleStockUpdate(item._id, itemStock + 1)
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                +
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleStockUpdate(
-                                    item._id,
-                                    Math.max(0, itemStock - 1)
-                                  )
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                -
-                              </Button>
-                            </div>
-                          </div>
+                          )}
                         </TableCell>
                         <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              item.isAvailable
-                                ? "text-green-600 bg-green-100"
-                                : "text-red-600 bg-red-100"
-                            }`}
-                          >
-                            {translateAvailability(item.isAvailable)}
-                          </span>
+                          {isCombo ? (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-600 bg-gray-100">
+                              Combo
+                            </span>
+                          ) : (
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${(item.quantity ?? 0) > 0 ? "text-green-600 bg-green-100" : "text-red-600 bg-red-100"}`}
+                            >
+                              {(item.quantity ?? 0) > 0
+                                ? "Còn hàng"
+                                : "Hết hàng"}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -816,7 +1030,7 @@ export default function InventoryPage() {
                     <TableCell>
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
-                          order.status
+                          order.status,
                         )}`}
                       >
                         {translateOrderStatus(order.status)}
