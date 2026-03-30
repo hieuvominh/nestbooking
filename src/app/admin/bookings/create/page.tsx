@@ -68,6 +68,7 @@ interface InventoryItem {
   type?: "item" | "combo";
   duration?: number; // Duration in hours for combo packages
   includedItems?: string[]; // Items included in combo (optional)
+  pricePerPerson?: boolean; // If true, price is multiplied by guestCount
 }
 
 interface CartItem {
@@ -150,6 +151,9 @@ export default function CreateBookingPage() {
   const [selectedCombo, setSelectedCombo] = useState<InventoryItem | null>(
     null,
   );
+
+  // Guest count for per-person combos
+  const [guestCount, setGuestCount] = useState<number>(1);
 
   // Duration in hours for manual bookings (used when no combo selected)
   const [durationHours, setDurationHours] = useState<number>(1);
@@ -254,15 +258,16 @@ export default function CreateBookingPage() {
     });
 
     if (selectedCombo) {
-      // Combo selected: use fixed combo price
-      return normalizeVndAmount(selectedCombo.price);
+      // Combo selected: use combo price, multiply by guestCount if pricePerPerson
+      const base = normalizeVndAmount(selectedCombo.price);
+      return selectedCombo.pricePerPerson ? base * guestCount : base;
     }
     // Regular booking: calculate based on desk hourly rate
     if (!selectedDesk || bookingDuration <= 0) return 0;
     return Math.ceil(
       bookingDuration * normalizeVndAmount(selectedDesk.hourlyRate),
     );
-  }, [selectedCombo, selectedDesk, bookingDuration]);
+  }, [selectedCombo, selectedDesk, bookingDuration, guestCount]);
 
   // Calculate inventory/cart total (add-ons)
   const inventoryTotal = useMemo(() => {
@@ -363,6 +368,7 @@ export default function CreateBookingPage() {
   // Clear combo selection
   const clearCombo = () => {
     setSelectedCombo(null);
+    setGuestCount(1);
     // Reset combo and compute endTime from durationHours if startTime exists
     if (formData.startTime && durationHours > 0) {
       const [datePart, timePart] = formData.startTime.split("T");
@@ -483,10 +489,6 @@ export default function CreateBookingPage() {
 
   // Validate form
   const validateForm = (): boolean => {
-    if (!formData.customerName.trim()) {
-      toast.error("Vui lòng nhập tên khách hàng");
-      return false;
-    }
     if (!formData.deskId) {
       toast.error("Vui lòng chọn bàn");
       return false;
@@ -538,7 +540,7 @@ export default function CreateBookingPage() {
       // Always create booking and redirect to billing page for payment/invoice
       const bookingData = {
         customer: {
-          name: formData.customerName,
+          name: formData.customerName?.trim() || undefined,
           email: formData.customerEmail || undefined,
           phone: formData.customerPhone || undefined,
         },
@@ -555,7 +557,11 @@ export default function CreateBookingPage() {
         notes: formData.notes,
         // include combo selection so server and billing know this is a combo booking
         ...(selectedCombo
-          ? { comboId: selectedCombo._id, isComboBooking: true }
+          ? {
+              comboId: selectedCombo._id,
+              isComboBooking: true,
+              ...(selectedCombo.pricePerPerson ? { guestCount } : {}),
+            }
           : {}),
       };
 
@@ -669,7 +675,7 @@ export default function CreateBookingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="customerName">Họ và Tên *</Label>
+                  <Label htmlFor="customerName">Họ và Tên (tùy chọn)</Label>
                   <Input
                     id="customerName"
                     placeholder="Nguyễn Văn A"
@@ -677,7 +683,6 @@ export default function CreateBookingPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, customerName: e.target.value })
                     }
-                    required
                   />
                 </div>
 
@@ -737,6 +742,12 @@ export default function CreateBookingPage() {
                     <SelectContent>
                       {desks
                         ?.filter((desk) => desk.status === "available")
+                        .sort((a, b) =>
+                          a.label.localeCompare(b.label, undefined, {
+                            numeric: true,
+                            sensitivity: "base",
+                          }),
+                        )
                         .map((desk) => (
                           <SelectItem key={desk._id} value={desk._id}>
                             {desk.label} - {desk.location} (
@@ -816,10 +827,46 @@ export default function CreateBookingPage() {
                           <p className="text-sm">
                             <DollarSign className="inline h-4 w-4 mr-1" />
                             <span className="font-semibold text-green-600">
-                              {formatCurrency(selectedCombo.price)}
+                              {selectedCombo.pricePerPerson
+                                ? `${formatCurrency(selectedCombo.price)}/khách`
+                                : formatCurrency(selectedCombo.price)}
                             </span>
                           </p>
                         </div>
+                        {selectedCombo.pricePerPerson && (
+                          <div className="mt-3 flex items-center gap-2">
+                            <Label
+                              htmlFor="guestCount"
+                              className="text-sm whitespace-nowrap"
+                            >
+                              Số khách *
+                            </Label>
+                            <Input
+                              id="guestCount"
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={guestCount}
+                              onChange={(e) => {
+                                const v = Math.max(
+                                  1,
+                                  Math.floor(Number(e.target.value) || 1),
+                                );
+                                setGuestCount(v);
+                              }}
+                              className="w-24"
+                            />
+                            <span className="text-sm text-gray-600">
+                              → Tổng:{" "}
+                              <strong>
+                                {formatCurrency(
+                                  normalizeVndAmount(selectedCombo.price) *
+                                    guestCount,
+                                )}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <Button
                         type="button"
@@ -1332,26 +1379,19 @@ export default function CreateBookingPage() {
 
                   <Separator />
 
-                  <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-lg">
+                  <button
+                    type="submit"
+                    className="cursor-pointer w-full flex justify-between items-center bg-gradient-to-r from-slate-900 to-slate-700 text-white p-4 rounded-lg shadow-md hover:from-slate-800 hover:to-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting || displayedGrandTotal === 0}
+                  >
                     <span className="text-lg font-semibold">
-                      Tổng thanh toán
+                      {isSubmitting ? "Đang tạo đặt bàn..." : "Tổng thanh toán"}
                     </span>
                     <span className="text-2xl font-bold">
                       {formatCurrency(displayedGrandTotal)}
                     </span>
-                  </div>
+                  </button>
                 </div>
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  size="lg"
-                  disabled={isSubmitting || displayedGrandTotal === 0}
-                >
-                  {isSubmitting
-                    ? "Đang tạo đặt bàn..."
-                    : `Tạo Đặt Bàn - ${formatCurrency(displayedGrandTotal)}`}
-                </Button>
 
                 {/* Info */}
                 <p className="text-xs text-gray-500 text-center">

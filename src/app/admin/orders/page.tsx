@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import {
@@ -156,6 +157,26 @@ export default function OrdersPage() {
     }
   };
 
+  const sortedOrders = useMemo(() => {
+    const source = ordersResponse?.orders || [];
+    const waitingStatuses = new Set([
+      "pending",
+      "confirmed",
+      "preparing",
+      "ready",
+    ]);
+
+    return [...source].sort((a, b) => {
+      const aWaiting = waitingStatuses.has(a.status) ? 0 : 1;
+      const bWaiting = waitingStatuses.has(b.status) ? 0 : 1;
+      if (aWaiting !== bWaiting) return aWaiting - bWaiting;
+
+      const aTime = new Date(a.orderedAt || a.createdAt).getTime();
+      const bTime = new Date(b.orderedAt || b.createdAt).getTime();
+      return bTime - aTime;
+    });
+  }, [ordersResponse?.orders]);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -191,7 +212,7 @@ export default function OrdersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ordersResponse?.orders?.map((order) => (
+              {sortedOrders.map((order) => (
                 <TableRow key={order._id}>
                   <TableCell className="font-mono text-sm">
                     {order._id.slice(-8)}
@@ -219,6 +240,12 @@ export default function OrdersPage() {
                           {item.quantity}x {item.name}
                         </div>
                       ))}
+                      {order.notes && (
+                        <div className="mt-2 rounded-md bg-amber-50 border border-amber-100 px-2 py-1 text-xs text-amber-800">
+                          <span className="font-semibold">Lời nhắn:</span>{" "}
+                          {order.notes}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">

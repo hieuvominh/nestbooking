@@ -4,11 +4,13 @@ import { applyShiftSale } from '@/lib/shift-stock';
 export interface EnsureComboOrderParams {
   bookingId: string;
   comboId: string;
+  guestCount?: number;
 }
 
 export async function ensureComboOrderForPaidBooking({
   bookingId,
-  comboId
+  comboId,
+  guestCount = 1
 }: EnsureComboOrderParams) {
   if (!bookingId || !comboId) return null;
 
@@ -45,15 +47,14 @@ export async function ensureComboOrderForPaidBooking({
 
   const orderItems = included.map((it: any) => {
     const itemId = String(it.item);
-    const qty = Number(it.quantity || 0) || 0;
+    const qty = (Number(it.quantity || 0) || 0) * Math.max(1, guestCount);
     const component = componentMap.get(itemId);
-    const price = Number(component?.price ?? 0) || 0;
     return {
       itemId,
       name: component?.name || `Item ${itemId.slice(-6)}`,
-      price,
+      price: 0,
       quantity: qty,
-      subtotal: price * qty
+      subtotal: 0
     };
   });
 
@@ -65,7 +66,7 @@ export async function ensureComboOrderForPaidBooking({
     }))
   );
 
-  const total = orderItems.reduce((sum, it) => sum + it.subtotal, 0);
+  const total = 0;
 
   const order = new Order({
     bookingId,

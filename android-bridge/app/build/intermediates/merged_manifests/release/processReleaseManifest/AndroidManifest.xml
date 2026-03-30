@@ -41,7 +41,8 @@
         android:usesCleartextTraffic="true" >
         <activity
             android:name="com.bookingcoo.bridge.MainActivity"
-            android:exported="true" >
+            android:exported="true"
+            android:screenOrientation="landscape" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

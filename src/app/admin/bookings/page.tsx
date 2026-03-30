@@ -70,8 +70,9 @@ export default function BookingsPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Filters
-  const [startDate, setStartDate] = useState<string>(""); // yyyy-mm-dd
-  const [endDate, setEndDate] = useState<string>("");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState<string>(todayStr); // yyyy-mm-dd
+  const [endDate, setEndDate] = useState<string>(todayStr);
   const [onlyToday, setOnlyToday] = useState<boolean>(true);
 
   const bookingsUrl = useMemo(() => {
@@ -100,16 +101,6 @@ export default function BookingsPage() {
     refreshInterval: 300000, // Poll every 5 minutes
   });
   const { apiCall } = useApi();
-
-  // Initialize filter to today by default
-  useEffect(() => {
-    if (!onlyToday && startDate === "" && endDate === "") {
-      const today = new Date().toISOString().slice(0, 10);
-      setStartDate(today);
-      setEndDate(today);
-      setOnlyToday(true);
-    }
-  }, []);
 
   const handleSaveBooking = async () => {
     // This function is now handled inside the modal
@@ -222,7 +213,10 @@ export default function BookingsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Quản lý đặt chỗ</h1>
-        <Button onClick={() => router.push("/admin/bookings/create")}>
+        <Button
+          onClick={() => router.push("/admin/bookings/create")}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-700 hover:to-indigo-700"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Tạo đặt chỗ mới
         </Button>
@@ -289,7 +283,7 @@ export default function BookingsPage() {
                   setOnlyToday(false);
                 }}
               >
-                Clear
+                Xóa bộ lọc
               </Button>
             </div>
           </div>

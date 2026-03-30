@@ -33,6 +33,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
     } = body;
     const { duration } = body;
     const { includedItems } = body;
+    const { pricePerPerson } = body;
     // normalize category values coming from clients
     const category = rawCategory === 'supplies' ? 'office-supplies' : rawCategory === 'drinks' ? 'beverage' : rawCategory === 'snacks' ? 'merchandise' : rawCategory;
 
@@ -91,6 +92,10 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
           return ApiResponses.badRequest('Invalid duration value');
         }
         item.duration = parsed;
+      }
+      // update pricePerPerson flag
+      if (pricePerPerson !== undefined) {
+        (item as any).pricePerPerson = pricePerPerson === true;
       }
     }
 

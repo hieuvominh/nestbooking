@@ -48,11 +48,11 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
-                Email
+                Tên đăng nhập/Email
               </label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 placeholder="admin@bookingcoo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

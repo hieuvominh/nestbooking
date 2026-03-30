@@ -172,7 +172,19 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
     }
 
     // Handle other updates
-    if (customer) updateData.customer = customer;
+    if (customer) {
+      const customerName = customer?.name?.trim();
+      const cleanCustomer: any = {
+        name: customerName || 'Khách Hàng',
+      };
+      if (customer.email && customer.email.trim()) {
+        cleanCustomer.email = customer.email.trim();
+      }
+      if (customer.phone && customer.phone.trim()) {
+        cleanCustomer.phone = customer.phone.trim();
+      }
+      updateData.customer = cleanCustomer;
+    }
     if (status) updateData.status = status;
     if (paymentStatus) updateData.paymentStatus = paymentStatus;
     if (notes !== undefined) updateData.notes = notes;

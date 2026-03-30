@@ -977,6 +977,12 @@ export default function BookingDetailPage() {
                             </span>
                           </div>
                         ))}
+                        {order.notes && (
+                          <div className="rounded-md bg-amber-50 border border-amber-100 p-2 text-xs text-amber-800">
+                            <span className="font-semibold">Lời nhắn:</span>{" "}
+                            {order.notes}
+                          </div>
+                        )}
                       </div>
                       <Separator className="my-2" />
                       <div className="flex justify-between font-semibold">
@@ -989,7 +995,7 @@ export default function BookingDetailPage() {
                         order.status !== "cancelled" && (
                           <div className="mt-3 pt-3 border-t">
                             <BluetoothPrintButton
-                              className="w-full"
+                              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0 shadow-sm hover:from-emerald-700 hover:to-teal-700"
                               label="Hoàn thành & In bill"
                               onBeforePrint={() =>
                                 handleCompleteOrder(order._id)

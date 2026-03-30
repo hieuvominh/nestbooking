@@ -15,6 +15,7 @@ export interface IInventoryItem extends Document {
   type?: 'combo' | 'item';
   duration?: number;
   includedItems?: { item: string; quantity: number }[];
+  pricePerPerson?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,6 +78,10 @@ const InventoryItemSchema = new Schema<IInventoryItem>(
       type: String,
       enum: ['combo', 'item'],
       default: 'item',
+    },
+    pricePerPerson: {
+      type: Boolean,
+      default: false,
     },
     duration: {
       type: Number,

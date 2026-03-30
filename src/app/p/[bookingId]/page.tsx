@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Card,
@@ -65,6 +66,7 @@ interface ExistingOrder {
   items: OrderItem[];
   totalAmount?: number;
   total?: number;
+  notes?: string;
   status: "pending" | "confirmed" | "completed" | "cancelled";
   createdAt: string;
   updatedAt: string;
@@ -83,7 +85,25 @@ export default function PublicBookingPage() {
   const [error, setError] = useState<string | null>(null);
   const [signature, setSignature] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [orderNote, setOrderNote] = useState("");
   const [orderLoading, setOrderLoading] = useState(false);
+
+  const fetchWithTimeout = async (
+    url: string,
+    options?: RequestInit,
+    timeoutMs = 15000,
+  ) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
   const statusLabel = (status: Booking["status"]) => {
     switch (status) {
@@ -127,13 +147,21 @@ export default function PublicBookingPage() {
         throw new Error("Cần mã truy cập");
       }
 
-      const response = await fetch(`/api/public/${bookingId}?t=${token}`);
+      const response = await fetchWithTimeout(
+        `/api/public/${bookingId}?t=${token}`,
+        undefined,
+        15000,
+      );
       if (!response.ok) {
         throw new Error("Không tìm thấy đặt chỗ hoặc không có quyền truy cập");
       }
       const data = await response.json();
       setBooking(data.data);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("Kết nối quá chậm. Vui lòng tải lại trang.");
+        return;
+      }
       setError(
         err instanceof Error ? err.message : "Không tải được thông tin đặt chỗ",
       );
@@ -334,6 +362,7 @@ export default function PublicBookingPage() {
             quantity: item.quantity,
           })),
           bookingId,
+          notes: orderNote.trim() || undefined,
           token,
         }),
       });
@@ -347,6 +376,7 @@ export default function PublicBookingPage() {
 
       const data = await response.json();
       setCart([]);
+      setOrderNote("");
       fetchExistingOrders(); // Refresh orders list
       toast.success("Đã gửi đơn thành công!");
     } catch (err) {
@@ -675,6 +705,25 @@ export default function PublicBookingPage() {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-4">
+                <label
+                  htmlFor="orderNote"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
+                  Lời nhắn cho nhân viên (không bắt buộc)
+                </label>
+                <Textarea
+                  id="orderNote"
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value.slice(0, 200))}
+                  placeholder="Ví dụ: Mình chọn trà xanh/ ít đá/ thêm sữa"
+                  className="min-h-20"
+                />
+                <p className="mt-1 text-xs text-gray-500 text-right">
+                  {orderNote.length}/200
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -736,6 +785,12 @@ export default function PublicBookingPage() {
                         {formatCurrency(order.totalAmount ?? order.total ?? 0)}
                       </span>
                     </div>
+                    {order.notes && (
+                      <div className="mt-2 rounded-md bg-amber-50 border border-amber-100 p-2 text-xs text-amber-800">
+                        <span className="font-semibold">Lời nhắn:</span>{" "}
+                        {order.notes}
+                      </div>
+                    )}
                     {order.status === "pending" && (
                       <div className="mt-3 flex justify-end">
                         <Button

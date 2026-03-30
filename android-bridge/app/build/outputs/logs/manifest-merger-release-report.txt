@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-32:12
-INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-32:12
-INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-32:12
-INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-32:12
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-33:12
+INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-33:12
+INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-33:12
+INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:1:1-33:12
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\Admin\.gradle\caches\transforms-4\bcd76576039abe4fc242de684dcac461\transformed\material-1.12.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.7.0] C:\Users\Admin\.gradle\caches\transforms-4\08045871352803910f4b2f448f859dd2\transformed\appcompat-resources-1.7.0\AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\Admin\.gradle\caches\transforms-4\6a1c042ed089aa61001c92951e802083\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -90,8 +90,8 @@ ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:11
 	android:name
 		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:11:17-58
 application
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:13:3-31:17
-INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:13:3-31:17
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:13:3-32:17
+INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:13:3-32:17
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\Admin\.gradle\caches\transforms-4\bcd76576039abe4fc242de684dcac461\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\Admin\.gradle\caches\transforms-4\bcd76576039abe4fc242de684dcac461\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\Admin\.gradle\caches\transforms-4\6a1c042ed089aa61001c92951e802083\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -129,21 +129,23 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\Admin\.gradle\cach
 	android:usesCleartextTraffic
 		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:19:5-40
 activity#com.bookingcoo.bridge.MainActivity
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:23:5-30:16
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:23:5-31:16
+	android:screenOrientation
+		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:26:7-44
 	android:exported
 		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:25:7-30
 	android:name
 		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:24:7-35
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:26:7-29:23
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:27:7-30:23
 action#android.intent.action.MAIN
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:27:9-61
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:28:9-61
 	android:name
-		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:27:17-58
+		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:28:17-58
 category#android.intent.category.LAUNCHER
-ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:28:9-69
+ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:29:9-69
 	android:name
-		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:28:19-66
+		ADDED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml:29:19-66
 uses-sdk
 INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from E:\code\bookingcoo\android-bridge\app\src\main\AndroidManifest.xml

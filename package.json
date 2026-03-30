@@ -8,6 +8,7 @@
         "start": "next start",
         "lint": "eslint",
         "seed": "npx tsx scripts/seed.ts",
+        "seed:desks": "npx tsx scripts/seed-desks.ts",
         "docker:up": "docker-compose up -d",
         "docker:down": "docker-compose down",
         "docker:build": "docker-compose build"

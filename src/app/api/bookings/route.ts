@@ -149,7 +149,8 @@ async function createBooking(request: AuthenticatedRequest) {
       discountAmount,
       promoCode,
       checkedInAt,
-      comboId
+      comboId,
+      guestCount
     } = body;
 
     // Validate required fields
@@ -157,13 +158,11 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.badRequest('Missing required fields');
     }
 
-    if (!customer.name) {
-      return ApiResponses.badRequest('Customer name is required');
-    }
+    const customerName = customer.name?.trim();
 
     // Clean up customer object - remove undefined values
     const cleanCustomer: any = {
-      name: customer.name.trim()
+      name: customerName || "Khách Hàng"
     };
     if (customer.email && customer.email.trim()) {
       cleanCustomer.email = customer.email.trim();
@@ -257,6 +256,9 @@ async function createBooking(request: AuthenticatedRequest) {
     if (comboId) {
       bookingData.comboId = comboId;
       bookingData.isComboBooking = true;
+      if (typeof guestCount === 'number' && guestCount >= 1) {
+        bookingData.guestCount = Math.floor(guestCount);
+      }
     }
 
     // Add checkedInAt if provided (for immediate check-ins)
@@ -277,6 +279,7 @@ async function createBooking(request: AuthenticatedRequest) {
         await ensureComboOrderForPaidBooking({
           bookingId: booking._id.toString(),
           comboId: String(comboId),
+          guestCount: bookingData.guestCount ?? 1,
         });
       } catch (err) {
         // rollback booking so we don't keep a reserved table
@@ -325,7 +328,7 @@ async function createBooking(request: AuthenticatedRequest) {
       type: 'income',
       amount: normalizedTotalAmount,
       source: 'booking',
-      description: `Đặt chỗ bàn ${desk.label} - ${cleanCustomer.name}`,
+      description: `Đặt chỗ bàn ${desk.label} - ${cleanCustomer.name || 'Khách hàng'}`,
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId

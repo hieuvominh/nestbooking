@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
       id: (booking as any)._id,
       desk: (booking as any).deskId,
       customer: {
-        name: (booking as any).customer.name,
+        name: (booking as any).customer.name || 'Khách hàng',
         // Don't expose email/phone for privacy
       },
       startTime: (booking as any).startTime,

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState } from "react";
-import { Bluetooth, BluetoothOff, Loader2 } from "lucide-react";
+import { BluetoothOff, Loader2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isBluetoothSupported, printReceipt } from "@/lib/bluetooth-printer";
 import { buildReceipt, type ReceiptData } from "@/lib/esc-pos";
@@ -145,7 +145,7 @@ function sanitizeReceiptData(data: ReceiptData): ReceiptData {
 export function BluetoothPrintButton({
   receiptData,
   className,
-  label = "In (Bluetooth)",
+  label = "In bill",
   onBeforePrint,
 }: BluetoothPrintButtonProps) {
   const [status, setStatus] = useState<Status>(
@@ -227,7 +227,7 @@ export function BluetoothPrintButton({
         {status === "printing" ? (
           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
         ) : (
-          <Bluetooth className="w-4 h-4 mr-2" />
+          <Printer className="w-4 h-4 mr-2" />
         )}
         {status === "printing" ? "Đang in..." : label}
       </Button>
