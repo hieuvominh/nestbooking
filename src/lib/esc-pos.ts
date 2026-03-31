@@ -148,6 +148,8 @@ export interface ReceiptData {
   timeOut: string;
   items: Array<{ name: string; qty: string; price: string }>;
   subtotal: string;
+  discountLabel?: string;
+  discountAmount?: string;
   total: string;
   cashReceived?: string;
   changeDue?: string;
@@ -204,6 +206,9 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
 
   // Totals
   b.rowLeftRight('Tam tinh:', data.subtotal);
+  if (data.discountAmount) {
+    b.rowLeftRight(data.discountLabel || 'Giam gia:', data.discountAmount);
+  }
   b.bold(true).rowLeftRight('TONG CONG:', data.total).bold(false);
 
   if (data.cashReceived) {

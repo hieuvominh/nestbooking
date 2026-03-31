@@ -39,6 +39,7 @@ import {
   CreditCard,
   X,
   Check,
+  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getShiftCode, getShiftDateKey } from "@/lib/shift";
@@ -106,6 +107,17 @@ interface ShiftResponse {
   dateKey: string;
   shiftCode: string;
   items: ShiftItem[];
+}
+
+interface VoucherValidationResult {
+  voucher: {
+    _id: string;
+    code: string;
+    type: string;
+    value: number;
+  };
+  discountApplied: number;
+  finalTotal: number;
 }
 
 export default function CreateBookingPage() {
@@ -189,6 +201,10 @@ export default function CreateBookingPage() {
     "pending" | "paid" | "refunded"
   >("paid");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [voucherCode, setVoucherCode] = useState<string>("");
+  const [voucherApplied, setVoucherApplied] =
+    useState<VoucherValidationResult | null>(null);
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
 
   // Auto-update end time when combo is selected
   useEffect(() => {
@@ -280,11 +296,20 @@ export default function CreateBookingPage() {
     return deskCost;
   }, [deskCost]);
 
+  const voucherDiscount = useMemo(() => {
+    if (!voucherApplied) return 0;
+    return normalizeVndAmount(voucherApplied.discountApplied);
+  }, [voucherApplied]);
+
+  const bookingTotalAfterVoucher = useMemo(() => {
+    return Math.max(0, bookingTotal - voucherDiscount);
+  }, [bookingTotal, voucherDiscount]);
+
   // For the cart display, optionally hide the time-based desk cost until
   // the user actually creates the booking (controlled by revealTimeCost).
-  const displayedDeskCost = revealTimeCost ? deskCost : 0;
+  const displayedDeskCost = revealTimeCost ? bookingTotalAfterVoucher : 0;
   const displayedGrandTotal = displayedDeskCost + inventoryTotal;
-  const displayedBookingTotal = revealTimeCost ? bookingTotal : 0;
+  const displayedBookingTotal = revealTimeCost ? bookingTotalAfterVoucher : 0;
 
   // Represent the desk (or selected combo) as a cart-like item so it appears
   // in the right-column cart list. Price uses displayedDeskCost so it will be
@@ -313,6 +338,7 @@ export default function CreateBookingPage() {
     setDurationHours(1);
     setSelectedCombo(null);
     setRevealTimeCost(false);
+    setVoucherApplied(null);
     toast.info("Đã xóa chọn bàn/gói");
   };
 
@@ -390,8 +416,60 @@ export default function CreateBookingPage() {
       setFormData((prev) => ({ ...prev, endTime: "" }));
     }
     setRevealTimeCost(false);
+    setVoucherApplied(null);
     toast.info("Đã xóa combo. Bạn có thể tự chọn thời lượng.");
   };
+
+  const clearVoucher = () => {
+    setVoucherApplied(null);
+    setVoucherCode("");
+    toast.info("Đã xóa voucher");
+  };
+
+  const handleValidateVoucher = async () => {
+    if (!voucherCode.trim()) {
+      toast.error("Vui lòng nhập mã voucher");
+      return;
+    }
+    if (!formData.deskId) {
+      toast.error("Vui lòng chọn bàn trước khi áp voucher");
+      return;
+    }
+
+    setIsValidatingVoucher(true);
+    try {
+      const data = await apiCall<VoucherValidationResult>(
+        "/api/vouchers/validate",
+        {
+          method: "POST",
+          body: {
+            code: voucherCode.trim().toUpperCase(),
+            subtotal: bookingTotal,
+            isComboBooking: Boolean(selectedCombo),
+            comboId: selectedCombo?._id,
+            guestCount,
+            comboPricePerPerson: Boolean(selectedCombo?.pricePerPerson),
+          },
+        },
+      );
+
+      setVoucherApplied(data);
+      setVoucherCode(data.voucher.code);
+      toast.success(`Áp dụng voucher ${data.voucher.code} thành công`);
+    } catch (error: any) {
+      setVoucherApplied(null);
+      const message =
+        error?.message || "Voucher không hợp lệ hoặc không áp dụng được";
+      toast.error(message);
+    } finally {
+      setIsValidatingVoucher(false);
+    }
+  };
+
+  useEffect(() => {
+    // Booking amount basis changed -> require re-validate voucher to avoid stale quote
+    setVoucherApplied(null);
+  }, [bookingTotal, selectedCombo?._id, selectedCombo?.pricePerPerson, guestCount]);
 
   // Automatically reveal time-based pricing when a desk + duration is selected
   // or when a combo is selected. Hide it otherwise.
@@ -546,11 +624,12 @@ export default function CreateBookingPage() {
         startTime: dateTimeLocalToUTC(startIso),
         endTime: dateTimeLocalToUTC(endIso),
         status: resolvedStatus,
-        totalAmount: bookingTotal,
+        totalAmount: bookingTotalAfterVoucher,
         subtotalAmount: bookingTotal,
         discountPercent: 0,
-        discountAmount: 0,
-        promoCode: undefined,
+        discountAmount: voucherDiscount,
+        promoCode: voucherApplied?.voucher.code || undefined,
+        voucherCode: voucherApplied?.voucher.code || undefined,
         paymentStatus: resolvedPaymentStatus,
         notes: formData.notes,
         // include combo selection so server and billing know this is a combo booking
@@ -1360,14 +1439,61 @@ export default function CreateBookingPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                  <div className="space-y-2 rounded-lg border p-3">
+                    <Label className="text-sm flex items-center gap-2">
+                      <Ticket className="h-4 w-4" />
+                      Voucher
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Nhập mã voucher"
+                        value={voucherCode}
+                        onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                        className="uppercase"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleValidateVoucher}
+                        disabled={isValidatingVoucher || !voucherCode.trim()}
+                      >
+                        {isValidatingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
+                      </Button>
+                    </div>
+
+                    {voucherApplied && (
+                      <div className="rounded-md bg-green-50 border border-green-200 p-2 text-sm">
+                        <p className="font-medium text-green-700">
+                          Đã áp dụng: {voucherApplied.voucher.code}
+                        </p>
+                        <p className="text-green-700">
+                          Giảm: {formatCurrency(voucherDiscount)}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-1 h-7 px-2 text-red-600"
+                          onClick={clearVoucher}
+                        >
+                          Bỏ voucher
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
                 {/* Breakdown */}
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Thuê Bàn</span>
-                    <span className="font-medium">
-                      {formatCurrency(deskCost)}
-                    </span>
+                      <span className="font-medium">{formatCurrency(deskCost)}</span>
                   </div>
+                    {voucherDiscount > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>Voucher</span>
+                        <span className="font-medium">-{formatCurrency(voucherDiscount)}</span>
+                      </div>
+                    )}
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Món ({cart.length})</span>
                     <span className="font-medium">

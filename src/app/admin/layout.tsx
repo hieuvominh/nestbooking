@@ -18,6 +18,7 @@ import {
   Package,
   Boxes,
   Printer,
+  Ticket,
   LogOut,
   Menu,
   X,
@@ -45,7 +46,8 @@ export default function AdminLayout({
     if (
       pathname === "/admin/settings/desks" ||
       pathname === "/admin/settings/inventory" ||
-      pathname === "/admin/settings/printer"
+      pathname === "/admin/settings/printer" ||
+      pathname === "/admin/settings/vouchers"
     ) {
       setSettingsExpanded(true);
     }
@@ -98,6 +100,11 @@ export default function AdminLayout({
             name: "Kho hàng",
             href: "/admin/settings/inventory",
             icon: Package,
+          },
+          {
+            name: "Voucher",
+            href: "/admin/settings/vouchers",
+            icon: Ticket,
           },
           { name: "Máy in", href: "/admin/settings/printer", icon: Printer },
           {

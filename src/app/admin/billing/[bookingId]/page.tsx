@@ -29,6 +29,7 @@ import {
   ShoppingCart,
   X,
   CheckCircle,
+  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +54,16 @@ interface Booking {
   endTime: string;
   status: "confirmed" | "checked-in" | "completed" | "cancelled";
   totalAmount: number;
+  subtotalAmount?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  promoCode?: string;
+  appliedVoucher?: {
+    code: string;
+    type: string;
+    value: number;
+    discountApplied: number;
+  };
   paymentStatus: "pending" | "paid" | "refunded";
   notes?: string;
   checkedInAt?: string;
@@ -126,6 +137,17 @@ interface CartItem {
   category: string;
 }
 
+interface VoucherValidationResult {
+  voucher: {
+    _id: string;
+    code: string;
+    type: string;
+    value: number;
+  };
+  discountApplied: number;
+  finalTotal: number;
+}
+
 export default function BillingPage() {
   const params = useParams();
   const { user } = useAuth();
@@ -136,6 +158,10 @@ export default function BillingPage() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [promoCode, setPromoCode] = useState<string>("");
+  const [appliedVoucher, setAppliedVoucher] = useState<
+    VoucherValidationResult["voucher"] | null
+  >(null);
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // State for adding items (only for active bookings)
@@ -194,6 +220,30 @@ export default function BillingPage() {
     booking?.publicShortCode,
     booking?.publicToken,
     bookingId,
+  ]);
+
+  useEffect(() => {
+    if (!booking) return;
+    setDiscountPercent(0);
+    setDiscountAmount(normalizeVndAmount(booking.discountAmount ?? 0));
+    setPromoCode(booking.appliedVoucher?.code || booking.promoCode || "");
+    if (booking.appliedVoucher) {
+      setAppliedVoucher({
+        _id: "",
+        code: booking.appliedVoucher.code,
+        type: booking.appliedVoucher.type,
+        value: booking.appliedVoucher.value,
+      });
+    } else {
+      setAppliedVoucher(null);
+    }
+  }, [
+    booking?._id,
+    booking?.discountAmount,
+    booking?.promoCode,
+    booking?.appliedVoucher?.code,
+    booking?.appliedVoucher?.type,
+    booking?.appliedVoucher?.value,
   ]);
 
   useEffect(() => {
@@ -324,6 +374,14 @@ export default function BillingPage() {
       0,
     );
   }, [billableOrders]);
+
+  // Booking charge before discount: prefer persisted subtotal from backend
+  // to avoid applying discount twice when voucher was already applied at create-time.
+  const bookingAmountBeforeDiscount = useMemo(() => {
+    if (!booking) return deskCost;
+    const persisted = normalizeVndAmount(booking.subtotalAmount ?? 0);
+    return persisted > 0 ? persisted : deskCost;
+  }, [booking?._id, booking?.subtotalAmount, deskCost]);
 
   // Flattened list of order items for detailed display
   const orderItemsFlattened = useMemo(() => {
@@ -512,8 +570,8 @@ export default function BillingPage() {
 
   // Calculate subtotal (desk/combo + orders)
   const subtotal = useMemo(() => {
-    return deskCost + ordersTotal;
-  }, [deskCost, ordersTotal]);
+    return bookingAmountBeforeDiscount + ordersTotal;
+  }, [bookingAmountBeforeDiscount, ordersTotal]);
 
   // Calculate discount
   const calculatedDiscount = useMemo(() => {
@@ -636,6 +694,7 @@ export default function BillingPage() {
           discountPercent: discountPercent,
           discountAmount: appliedDiscount,
           promoCode: promoCode || undefined,
+          voucherCode: appliedVoucher?.code || undefined,
         },
       });
       mutateBooking();
@@ -700,6 +759,7 @@ export default function BillingPage() {
         discountPercent?: number;
         discountAmount?: number;
         promoCode?: string;
+        voucherCode?: string;
       } = {
         status: "completed",
         completedAt: new Date().toISOString(),
@@ -708,6 +768,7 @@ export default function BillingPage() {
         discountPercent: discountPercent,
         discountAmount: appliedDiscount,
         promoCode: promoCode || undefined,
+        voucherCode: appliedVoucher?.code || undefined,
       };
 
       // If payment is pending, mark as paid
@@ -746,27 +807,58 @@ export default function BillingPage() {
 
   const canAdjustDiscounts = booking?.paymentStatus === "pending";
 
-  // Apply promo code (placeholder logic - you can enhance this)
-  const handleApplyPromo = () => {
+  const handleApplyPromo = async () => {
     if (!canAdjustDiscounts) {
       toast.error("Đơn đã thanh toán/hoàn tiền, không thể áp dụng khuyến mãi");
       return;
     }
 
-    const validPromoCodes: { [key: string]: number } = {
-      SAVE10: 10,
-      SAVE20: 20,
-      FIRSTVISIT: 15,
-    };
-
-    const discount = validPromoCodes[promoCode.toUpperCase()];
-    if (discount) {
-      setDiscountPercent(discount);
-      setDiscountAmount(0);
-      toast.success(`Áp dụng mã khuyến mãi! Giảm ${discount}%`);
-    } else {
-      toast.error("Mã khuyến mãi không hợp lệ");
+    if (!promoCode.trim()) {
+      toast.error("Vui lòng nhập voucher");
+      return;
     }
+
+    setIsValidatingVoucher(true);
+    try {
+      const data = await apiCall<VoucherValidationResult>(
+        "/api/vouchers/validate",
+        {
+          method: "POST",
+          body: {
+            code: promoCode.trim().toUpperCase(),
+            subtotal: deskCost,
+            isComboBooking: Boolean(booking?.comboId || booking?.isComboBooking),
+            comboId: booking?.comboId?._id,
+            guestCount: effectiveGuestCount,
+            comboPricePerPerson: Boolean(
+              (comboDetails || (booking?.comboId as any))?.pricePerPerson,
+            ),
+          },
+        },
+      );
+
+      setAppliedVoucher(data.voucher);
+      setPromoCode(data.voucher.code);
+      setDiscountPercent(0);
+      setDiscountAmount(normalizeVndAmount(data.discountApplied));
+      toast.success(`Áp dụng voucher ${data.voucher.code} thành công`);
+    } catch (error: any) {
+      const msg = error?.message || "Voucher không hợp lệ";
+      toast.error(msg);
+      setAppliedVoucher(null);
+      setDiscountAmount(0);
+    } finally {
+      setIsValidatingVoucher(false);
+    }
+  };
+
+  const clearAppliedVoucher = () => {
+    if (!canAdjustDiscounts) return;
+    setAppliedVoucher(null);
+    setPromoCode("");
+    setDiscountPercent(0);
+    setDiscountAmount(0);
+    toast.info("Đã bỏ voucher");
   };
 
   /**
@@ -1559,14 +1651,30 @@ export default function BillingPage() {
                   <Button
                     variant="outline"
                     onClick={handleApplyPromo}
-                    disabled={!promoCode || !canAdjustDiscounts}
+                    disabled={!promoCode || !canAdjustDiscounts || isValidatingVoucher}
                   >
-                    Áp dụng
+                    {isValidatingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Thử: SAVE10, SAVE20, FIRSTVISIT
-                </p>
+                {appliedVoucher && (
+                  <div className="mt-2 rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-700">
+                    <p className="font-semibold flex items-center gap-1">
+                      <Ticket className="h-3 w-3" /> {appliedVoucher.code}
+                    </p>
+                    <p>Giảm: {formatCurrency(discountAmount)}</p>
+                    {canAdjustDiscounts && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1 h-6 px-2 text-red-600"
+                        onClick={clearAppliedVoucher}
+                      >
+                        Bỏ voucher
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {!canAdjustDiscounts && (
                   <p className="text-xs text-amber-600 mt-1">
                     Đơn đã chốt thanh toán, không thể chỉnh giảm giá.
@@ -1575,40 +1683,9 @@ export default function BillingPage() {
               </div>
 
               <Separator />
-
-              {/* Manual Discount */}
-              <div>
-                <Label className="text-sm">Phần trăm giảm</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={discountPercent}
-                  onChange={(e) => {
-                    setDiscountPercent(Number(e.target.value));
-                    setDiscountAmount(0);
-                  }}
-                  placeholder="0"
-                  className="mt-1"
-                  disabled={!canAdjustDiscounts}
-                />
-              </div>
-
-              <div>
-                <Label className="text-sm">Số tiền giảm ($)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={discountAmount}
-                  onChange={(e) => {
-                    setDiscountAmount(Number(e.target.value));
-                    setDiscountPercent(0);
-                  }}
-                  placeholder="0.00"
-                  className="mt-1"
-                  disabled={!canAdjustDiscounts}
-                />
-              </div>
+              <p className="text-xs text-gray-500">
+                Chỉ áp dụng 1 voucher cho phần tiền bàn/combo.
+              </p>
             </CardContent>
           </Card>
 
@@ -1653,7 +1730,7 @@ export default function BillingPage() {
                       : "Thuê bàn"}
                   </span>
                   <span className="font-medium">
-                    {formatCurrency(deskCost)}
+                    {formatCurrency(bookingAmountBeforeDiscount)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1731,7 +1808,9 @@ export default function BillingPage() {
 
                 {calculatedDiscount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Giảm giá</span>
+                    <span>
+                      Giảm giá {appliedVoucher?.code ? `(${appliedVoucher.code})` : ""}
+                    </span>
                     <span>-{formatCurrency(calculatedDiscount)}</span>
                   </div>
                 )}
@@ -1888,6 +1967,14 @@ export default function BillingPage() {
                             timeOut: fmtTime(booking.endTime),
                             items: btItems,
                             subtotal: fmtVnd(subtotal),
+                            discountLabel:
+                              appliedDiscount > 0
+                                ? `Voucher${appliedVoucher?.code ? ` (${appliedVoucher.code})` : ""}:`
+                                : undefined,
+                            discountAmount:
+                              appliedDiscount > 0
+                                ? `-${fmtVnd(appliedDiscount)}`
+                                : undefined,
                             total: fmtVnd(finalTotal),
                             footerNote: "Goi them mon",
                             qrLabel: "Quet ma de goi mon",

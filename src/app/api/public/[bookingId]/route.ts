@@ -33,7 +33,8 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
     }
 
     const booking = await Booking.findById(bookingId)
-      .populate('deskId', 'label location')
+      .populate('deskId', 'label location hourlyRate')
+      .populate('comboId', 'name pricePerPerson')
       .lean();
 
     if (!booking) {
@@ -44,20 +45,28 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
       return ApiResponses.unauthorized('Booking has ended');
     }
 
+    const bookingAny = booking as any;
+    const combo = bookingAny.comboId as any;
+    const isMeetingRoomBooking = Boolean(
+      bookingAny.isComboBooking && combo && combo.pricePerPerson
+    );
+
     // Don't expose sensitive information
     const publicBookingData = {
-      id: (booking as any)._id,
-      desk: (booking as any).deskId,
+      id: bookingAny._id,
+      desk: bookingAny.deskId,
       customer: {
-        name: (booking as any).customer.name || 'Khách hàng',
+        name: bookingAny.customer.name || 'Khách hàng',
         // Don't expose email/phone for privacy
       },
-      startTime: (booking as any).startTime,
-      endTime: (booking as any).endTime,
-      status: (booking as any).status,
-      totalAmount: (booking as any).totalAmount,
-      checkedInAt: (booking as any).checkedInAt,
-      notes: (booking as any).notes,
+      startTime: bookingAny.startTime,
+      endTime: bookingAny.endTime,
+      status: bookingAny.status,
+      totalAmount: bookingAny.totalAmount,
+      checkedInAt: bookingAny.checkedInAt,
+      checkInTime: bookingAny.checkedInAt,
+      notes: bookingAny.notes,
+      isMeetingRoomBooking,
     };
 
     return ApiResponses.success(publicBookingData);

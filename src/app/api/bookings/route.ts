@@ -1,12 +1,59 @@
 import { NextRequest } from 'next/server';
 import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
-import { Booking, Desk, Transaction, InventoryItem } from '@/models';
+import { Booking, Desk, Transaction, InventoryItem, Voucher } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
 import { normalizeVndAmount } from '@/lib/currency';
+import { calculateVoucherDiscount } from '@/lib/voucher';
 import { getNowInVietnam } from '@/lib/vietnam-time';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+
+function formatVnd(amount: number) {
+  return `${normalizeVndAmount(amount).toLocaleString('vi-VN')}đ`;
+}
+
+function getVoucherTypeLabel(type?: string) {
+  switch (type) {
+    case 'fixed_amount':
+      return 'Giảm tiền cố định';
+    case 'percent':
+      return 'Giảm phần trăm';
+    case 'combo_price_override':
+      return 'Đặt giá combo cố định';
+    case 'per_person_price_override':
+      return 'Đặt giá combo theo đầu người';
+    default:
+      return undefined;
+  }
+}
+
+function buildBookingIncomeDescription(params: {
+  deskLabel?: string;
+  customerName?: string;
+  subtotal: number;
+  discountApplied: number;
+  finalTotal: number;
+  voucherCode?: string;
+  voucherType?: string;
+}) {
+  const {
+    deskLabel,
+    customerName,
+    subtotal,
+    discountApplied,
+    finalTotal,
+    voucherCode,
+    voucherType,
+  } = params;
+
+  const voucherLabel = getVoucherTypeLabel(voucherType);
+  const voucherText = voucherCode
+    ? ` | Voucher: ${voucherCode}${voucherLabel ? ` (${voucherLabel})` : ''}`
+    : '';
+
+  return `Thanh toán đặt chỗ ${deskLabel || ''} - ${customerName || 'Khách hàng'} | Tạm tính: ${formatVnd(subtotal)} | Giảm: ${formatVnd(discountApplied)} | Thành tiền: ${formatVnd(finalTotal)}${voucherText}`;
+}
 
 async function ensurePublicShortCode(booking: any) {
   if (booking.publicShortCode) return;
@@ -150,6 +197,7 @@ async function createBooking(request: AuthenticatedRequest) {
       discountPercent,
       discountAmount,
       promoCode,
+      voucherCode,
       checkedInAt,
       comboId,
       guestCount
@@ -214,13 +262,88 @@ async function createBooking(request: AuthenticatedRequest) {
       return ApiResponses.conflict('Desk is already booked for this time period');
     }
 
-    // Calculate total amount (use provided value or calculate from desk rate)
+    // Calculate subtotal amount (combo price OR desk rate x duration)
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    const calculatedAmount = Math.ceil(durationHours * desk.hourlyRate);
-    const normalizedTotalAmount =
+    let combo: any = null;
+    if (comboId) {
+      combo = await InventoryItem.findById(comboId).select('name price pricePerPerson').lean();
+      if (!combo) {
+        return ApiResponses.badRequest('Combo không tồn tại');
+      }
+    }
+    const comboGuests = typeof guestCount === 'number' && guestCount >= 1 ? Math.floor(guestCount) : 1;
+    const calculatedSubtotal = combo
+      ? normalizeVndAmount(combo.price) * (combo.pricePerPerson ? comboGuests : 1)
+      : Math.ceil(durationHours * desk.hourlyRate);
+    const normalizedSubtotalAmount =
+      typeof subtotalAmount === 'number' && subtotalAmount >= 0
+        ? normalizeVndAmount(subtotalAmount)
+        : normalizeVndAmount(calculatedSubtotal);
+
+    let normalizedTotalAmount =
       typeof totalAmount === 'number' && totalAmount >= 0
         ? normalizeVndAmount(totalAmount)
-        : normalizeVndAmount(calculatedAmount);
+        : normalizedSubtotalAmount;
+
+    let normalizedDiscountAmount =
+      typeof discountAmount === 'number' && discountAmount >= 0
+        ? normalizeVndAmount(discountAmount)
+        : 0;
+
+    let normalizedDiscountPercent =
+      typeof discountPercent === 'number' && discountPercent >= 0
+        ? discountPercent
+        : 0;
+
+    let resolvedPromoCode = promoCode && String(promoCode).trim() ? String(promoCode).trim() : undefined;
+    let appliedVoucher: any = undefined;
+
+    const normalizedVoucherCode = voucherCode && String(voucherCode).trim()
+      ? String(voucherCode).trim().toUpperCase()
+      : undefined;
+
+    if (normalizedVoucherCode) {
+      const voucherDoc: any = await (Voucher as any)
+        .findOne({ code: normalizedVoucherCode })
+        .lean();
+      if (!voucherDoc) {
+        return ApiResponses.badRequest('Voucher không tồn tại');
+      }
+
+      const voucherCalc = calculateVoucherDiscount(voucherDoc, {
+        subtotal: normalizedSubtotalAmount,
+        isComboBooking: Boolean(comboId),
+        comboPricePerPerson: Boolean(combo?.pricePerPerson),
+        guestCount: comboGuests,
+      });
+
+      if (!voucherCalc.valid) {
+        return ApiResponses.badRequest(voucherCalc.reason || 'Voucher không hợp lệ');
+      }
+
+      normalizedDiscountAmount = normalizeVndAmount(voucherCalc.discountApplied);
+      normalizedDiscountPercent = 0;
+      normalizedTotalAmount = normalizeVndAmount(voucherCalc.finalTotal);
+      resolvedPromoCode = voucherDoc.code;
+      appliedVoucher = {
+        voucherId: voucherDoc._id,
+        code: voucherDoc.code,
+        type: voucherDoc.type,
+        value: voucherDoc.value,
+        discountApplied: normalizedDiscountAmount,
+        appliedAt: getNowInVietnam(),
+      };
+    } else {
+      // Legacy manual discount path (no voucher)
+      const manualDiscountRaw =
+        normalizedDiscountAmount > 0
+          ? normalizedDiscountAmount
+          : normalizedDiscountPercent > 0
+            ? normalizeVndAmount((normalizedSubtotalAmount * normalizedDiscountPercent) / 100)
+            : 0;
+      normalizedDiscountAmount = Math.min(manualDiscountRaw, normalizedSubtotalAmount);
+      normalizedTotalAmount = Math.max(0, normalizedSubtotalAmount - normalizedDiscountAmount);
+    }
     // Auto-status: if startTime is now or past (in Vietnam time), mark as checked-in
     const resolvedStatus =
       status || (start <= getNowInVietnam() ? 'checked-in' : 'confirmed');
@@ -236,19 +359,11 @@ async function createBooking(request: AuthenticatedRequest) {
       startTime: start,
       endTime: end,
       totalAmount: normalizedTotalAmount,
-      subtotalAmount:
-        typeof subtotalAmount === 'number' && subtotalAmount >= 0
-          ? normalizeVndAmount(subtotalAmount)
-          : undefined,
-      discountPercent:
-        typeof discountPercent === 'number' && discountPercent >= 0
-          ? discountPercent
-          : undefined,
-      discountAmount:
-        typeof discountAmount === 'number' && discountAmount >= 0
-          ? discountAmount
-          : undefined,
-      promoCode: promoCode && String(promoCode).trim() ? String(promoCode).trim() : undefined,
+      subtotalAmount: normalizedSubtotalAmount,
+      discountPercent: normalizedDiscountPercent > 0 ? normalizedDiscountPercent : undefined,
+      discountAmount: normalizedDiscountAmount > 0 ? normalizedDiscountAmount : undefined,
+      promoCode: resolvedPromoCode,
+      appliedVoucher,
       status: resolvedStatus,
       paymentStatus: resolvedPaymentStatus,
       notes
@@ -326,11 +441,26 @@ async function createBooking(request: AuthenticatedRequest) {
     await booking.save();
 
     // Create transaction record
-    const transaction = new Transaction({
+      const audit = {
+        subtotal: normalizedSubtotalAmount,
+        discountApplied: normalizedDiscountAmount,
+        finalTotal: normalizedTotalAmount,
+        voucherCode: appliedVoucher?.code,
+        voucherType: appliedVoucher?.type,
+      };
+      const transaction = new Transaction({
       type: 'income',
       amount: normalizedTotalAmount,
       source: 'booking',
-      description: `Đặt chỗ bàn ${desk.label} - ${cleanCustomer.name || 'Khách hàng'}`,
+      description: buildBookingIncomeDescription({
+        deskLabel: desk.label,
+        customerName: cleanCustomer.name || 'Khách hàng',
+        subtotal: audit.subtotal,
+        discountApplied: audit.discountApplied,
+        finalTotal: audit.finalTotal,
+        voucherCode: audit.voucherCode,
+        voucherType: audit.voucherType,
+      }),
       referenceId: booking._id,
       referenceModel: 'Booking',
       createdBy: request.user.userId

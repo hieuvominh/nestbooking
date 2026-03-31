@@ -33,7 +33,7 @@ async function reconcileShift(request: NextRequest) {
         itemId: item.itemId,
       });
       if (!shift) {
-        return ApiResponses.badRequest('Shift inventory not found');
+        return ApiResponses.badRequest('Có mặt hàng chưa được cấp cho ca đã chọn');
       }
 
       if (shift.reconciledAt) {

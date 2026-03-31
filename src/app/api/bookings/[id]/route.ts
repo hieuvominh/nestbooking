@@ -2,11 +2,82 @@ import { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
-import { Booking, Desk, Transaction } from '@/models';
+import { Booking, Desk, InventoryItem, Transaction, Voucher } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
 import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
+import { normalizeVndAmount } from '@/lib/currency';
+import { calculateVoucherDiscount } from '@/lib/voucher';
 import { getNowInVietnam } from '@/lib/vietnam-time';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
+
+function formatVnd(amount: number) {
+  return `${normalizeVndAmount(amount).toLocaleString('vi-VN')}đ`;
+}
+
+function getVoucherTypeLabel(type?: string) {
+  switch (type) {
+    case 'fixed_amount':
+      return 'Giảm tiền cố định';
+    case 'percent':
+      return 'Giảm phần trăm';
+    case 'combo_price_override':
+      return 'Đặt giá combo cố định';
+    case 'per_person_price_override':
+      return 'Đặt giá combo theo đầu người';
+    default:
+      return undefined;
+  }
+}
+
+function buildBookingIncomeDescription(params: {
+  customerName?: string;
+  subtotal: number;
+  discountApplied: number;
+  finalTotal: number;
+  voucherCode?: string;
+  voucherType?: string;
+}) {
+  const {
+    customerName,
+    subtotal,
+    discountApplied,
+    finalTotal,
+    voucherCode,
+    voucherType,
+  } = params;
+
+  const voucherLabel = getVoucherTypeLabel(voucherType);
+  const voucherText = voucherCode
+    ? ` | Voucher: ${voucherCode}${voucherLabel ? ` (${voucherLabel})` : ''}`
+    : '';
+
+  return `Thanh toán đặt chỗ - ${customerName || 'Khách hàng'} | Tạm tính: ${formatVnd(subtotal)} | Giảm: ${formatVnd(discountApplied)} | Thành tiền: ${formatVnd(finalTotal)}${voucherText}`;
+}
+
+function buildBookingRefundDescription(params: {
+  customerName?: string;
+  subtotal: number;
+  discountApplied: number;
+  refundTotal: number;
+  voucherCode?: string;
+  voucherType?: string;
+}) {
+  const {
+    customerName,
+    subtotal,
+    discountApplied,
+    refundTotal,
+    voucherCode,
+    voucherType,
+  } = params;
+
+  const voucherLabel = getVoucherTypeLabel(voucherType);
+  const voucherText = voucherCode
+    ? ` | Voucher: ${voucherCode}${voucherLabel ? ` (${voucherLabel})` : ''}`
+    : '';
+
+  return `Hoàn tiền đặt chỗ - ${customerName || 'Khách hàng'} | Tạm tính: ${formatVnd(subtotal)} | Giảm: ${formatVnd(discountApplied)} | Hoàn tiền: ${formatVnd(refundTotal)}${voucherText}`;
+}
 
 async function ensurePublicShortCode(booking: any) {
   if (booking.publicShortCode) return;
@@ -92,7 +163,9 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       subtotalAmount,
       discountPercent,
       discountAmount,
-      promoCode
+      promoCode,
+      voucherCode,
+      clearVoucher,
     } = body;
 
     const booking = await Booking.findById(id);
@@ -109,6 +182,10 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
     // Don't allow changes to completed or cancelled bookings
     if (booking.status === 'completed' || booking.status === 'cancelled') {
       return ApiResponses.badRequest('Cannot modify completed or cancelled bookings');
+    }
+
+    if (booking.paymentStatus !== 'pending' && (voucherCode !== undefined || clearVoucher === true)) {
+      return ApiResponses.badRequest('Đơn đã thanh toán/hoàn tiền, không thể chỉnh voucher');
     }
 
     let updateData: any = {};
@@ -207,6 +284,75 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
         : undefined;
     }
 
+    const hasManualDiscountInput =
+      (typeof discountAmount === 'number' && discountAmount > 0) ||
+      (typeof discountPercent === 'number' && discountPercent > 0);
+
+    if (booking.appliedVoucher && hasManualDiscountInput) {
+      return ApiResponses.badRequest('Không thể dùng giảm tay khi đã áp voucher');
+    }
+
+    if (clearVoucher === true) {
+      const recoveredSubtotal =
+        typeof updateData.subtotalAmount === 'number'
+          ? normalizeVndAmount(updateData.subtotalAmount)
+          : normalizeVndAmount(booking.subtotalAmount ?? booking.totalAmount);
+      updateData.appliedVoucher = undefined;
+      updateData.promoCode = undefined;
+      updateData.discountPercent = 0;
+      updateData.discountAmount = 0;
+      updateData.subtotalAmount = recoveredSubtotal;
+      updateData.totalAmount = recoveredSubtotal;
+    }
+
+    const normalizedVoucherCode = voucherCode && String(voucherCode).trim()
+      ? String(voucherCode).trim().toUpperCase()
+      : undefined;
+
+    if (normalizedVoucherCode) {
+      if (hasManualDiscountInput) {
+        return ApiResponses.badRequest('Không thể cộng dồn voucher với giảm tay');
+      }
+
+      const voucher = await Voucher.findOne({ code: normalizedVoucherCode }).lean();
+      if (!voucher) {
+        return ApiResponses.badRequest('Voucher không tồn tại');
+      }
+
+      const combo = booking.comboId
+        ? await InventoryItem.findById(booking.comboId).select('pricePerPerson').lean()
+        : null;
+      const baseSubtotal =
+        typeof updateData.subtotalAmount === 'number'
+          ? normalizeVndAmount(updateData.subtotalAmount)
+          : normalizeVndAmount(booking.subtotalAmount ?? booking.totalAmount);
+
+      const voucherCalc = calculateVoucherDiscount(voucher as any, {
+        subtotal: baseSubtotal,
+        isComboBooking: Boolean(booking.comboId || booking.isComboBooking),
+        comboPricePerPerson: Boolean((combo as any)?.pricePerPerson),
+        guestCount: booking.guestCount,
+      });
+
+      if (!voucherCalc.valid) {
+        return ApiResponses.badRequest(voucherCalc.reason || 'Voucher không hợp lệ');
+      }
+
+      updateData.appliedVoucher = {
+        voucherId: voucher._id,
+        code: voucher.code,
+        type: voucher.type,
+        value: voucher.value,
+        discountApplied: normalizeVndAmount(voucherCalc.discountApplied),
+        appliedAt: getNowInVietnam(),
+      };
+      updateData.subtotalAmount = baseSubtotal;
+      updateData.discountPercent = 0;
+      updateData.discountAmount = normalizeVndAmount(voucherCalc.discountApplied);
+      updateData.promoCode = voucher.code;
+      updateData.totalAmount = normalizeVndAmount(voucherCalc.finalTotal);
+    }
+
     // Handle check-in
     if (status === 'checked-in' && booking.status !== 'checked-in') {
       updateData.checkedInAt = getNowInVietnam();
@@ -241,6 +387,8 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       }
     }
 
+    const previousPaymentStatus = booking.paymentStatus;
+
     const updatedBooking = await Booking.findByIdAndUpdate(
       id,
       updateData,
@@ -253,6 +401,22 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
         typeof updateData.totalAmount === 'number'
           ? updateData.totalAmount
           : updatedBooking.totalAmount;
+      const subtotalToUse =
+        typeof updateData.subtotalAmount === 'number'
+          ? normalizeVndAmount(updateData.subtotalAmount)
+          : normalizeVndAmount(updatedBooking.subtotalAmount ?? updatedBooking.totalAmount);
+      const discountToUse =
+        typeof updateData.discountAmount === 'number'
+          ? normalizeVndAmount(updateData.discountAmount)
+          : normalizeVndAmount(updatedBooking.discountAmount ?? 0);
+      const voucherAudit = updateData.appliedVoucher || updatedBooking.appliedVoucher;
+      const audit = {
+        subtotal: subtotalToUse,
+        discountApplied: discountToUse,
+        finalTotal: normalizeVndAmount(amountToUse),
+        voucherCode: voucherAudit?.code,
+        voucherType: voucherAudit?.type,
+      };
       const existing = await Transaction.findOne({
         referenceId: id,
         referenceModel: 'Booking',
@@ -260,16 +424,71 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       });
       if (existing) {
         existing.amount = amountToUse;
+        existing.description = buildBookingIncomeDescription({
+          customerName: updatedBooking.customer?.name || 'Khách hàng',
+          subtotal: audit.subtotal,
+          discountApplied: audit.discountApplied,
+          finalTotal: audit.finalTotal,
+          voucherCode: audit.voucherCode,
+          voucherType: audit.voucherType,
+        });
         await existing.save();
       } else {
         await Transaction.create({
           type: 'income',
           amount: amountToUse,
           source: 'booking',
-          description: `Booking payment - ${updatedBooking.customer?.name || 'Customer'}`,
+          description: buildBookingIncomeDescription({
+            customerName: updatedBooking.customer?.name || 'Khách hàng',
+            subtotal: audit.subtotal,
+            discountApplied: audit.discountApplied,
+            finalTotal: audit.finalTotal,
+            voucherCode: audit.voucherCode,
+            voucherType: audit.voucherType,
+          }),
           referenceId: updatedBooking._id,
           referenceModel: 'Booking',
           createdBy: request.user.userId
+        });
+      }
+    }
+
+    // Create refund expense transaction when payment transitions from paid -> refunded
+    if (previousPaymentStatus === 'paid' && updatedBooking?.paymentStatus === 'refunded') {
+      const refundAmount = normalizeVndAmount(updatedBooking.totalAmount ?? 0);
+      const refundVoucherAudit = updatedBooking.appliedVoucher;
+      const refundAudit = {
+        subtotal: normalizeVndAmount(updatedBooking.subtotalAmount ?? updatedBooking.totalAmount ?? 0),
+        discountApplied: normalizeVndAmount(updatedBooking.discountAmount ?? 0),
+        finalTotal: refundAmount,
+        voucherCode: refundVoucherAudit?.code,
+        voucherType: refundVoucherAudit?.type,
+      };
+
+      const existingRefund = await Transaction.findOne({
+        referenceId: id,
+        referenceModel: 'Booking',
+        type: 'expense',
+        source: 'booking',
+        description: { $regex: '^Refund booking payment' },
+      });
+
+      if (!existingRefund) {
+        await Transaction.create({
+          type: 'expense',
+          amount: refundAmount,
+          source: 'booking',
+          description: buildBookingRefundDescription({
+            customerName: updatedBooking.customer?.name || 'Khách hàng',
+            subtotal: refundAudit.subtotal,
+            discountApplied: refundAudit.discountApplied,
+            refundTotal: refundAudit.finalTotal,
+            voucherCode: refundAudit.voucherCode,
+            voucherType: refundAudit.voucherType,
+          }),
+          referenceId: updatedBooking._id,
+          referenceModel: 'Booking',
+          createdBy: request.user.userId,
         });
       }
     }

@@ -125,6 +125,12 @@ function sanitizeReceiptData(data: ReceiptData): ReceiptData {
     timeIn: stripDiacritics(data.timeIn),
     timeOut: stripDiacritics(data.timeOut),
     subtotal: stripDiacritics(data.subtotal),
+    discountLabel: data.discountLabel
+      ? stripDiacritics(data.discountLabel)
+      : undefined,
+    discountAmount: data.discountAmount
+      ? stripDiacritics(data.discountAmount)
+      : undefined,
     total: stripDiacritics(data.total),
     cashReceived: data.cashReceived
       ? stripDiacritics(data.cashReceived)

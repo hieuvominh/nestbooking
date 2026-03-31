@@ -10,6 +10,9 @@ interface OrderParams {
   params: Promise<{ bookingId: string }>;
 }
 
+const PUBLIC_ODD_HOUR_ITEM_CLIENT_ID = '__ODD_HOUR__';
+const PUBLIC_ODD_HOUR_SKU = 'ODD_HOUR_PUBLIC';
+
 // GET /api/public/[bookingId]/orders - Get orders for booking
 export async function GET(request: NextRequest, { params }: OrderParams) {
   try {
@@ -32,11 +35,11 @@ export async function GET(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.unauthorized('Invalid or expired access token');
     }
 
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label').lean();
     if (!booking) {
       return ApiResponses.notFound('Booking not found');
     }
-    if (booking.status === 'cancelled' || booking.status === 'completed') {
+    if ((booking as any).status === 'cancelled' || (booking as any).status === 'completed') {
       return ApiResponses.unauthorized('Booking has ended');
     }
 
@@ -84,16 +87,16 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     }
 
     // Validate booking exists and is checked in
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label').lean();
     if (!booking) {
       return ApiResponses.notFound('Booking not found');
     }
 
-    if (booking.status === 'cancelled' || booking.status === 'completed') {
+    if ((booking as any).status === 'cancelled' || (booking as any).status === 'completed') {
       return ApiResponses.unauthorized('Booking has ended');
     }
 
-    if (booking.status !== 'checked-in') {
+    if ((booking as any).status !== 'checked-in') {
       return ApiResponses.badRequest('Must be checked in to place orders');
     }
 
@@ -105,6 +108,54 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     for (const item of items) {
       const { itemId, sku, quantity } = item;
       const actualItemId = itemId || sku; // Support both field names
+
+      if (actualItemId === PUBLIC_ODD_HOUR_ITEM_CLIENT_ID) {
+        if (!quantity || quantity <= 0) {
+          return ApiResponses.badRequest('Số lượng giờ lẻ không hợp lệ');
+        }
+
+        const deskHourlyRate = normalizeVndAmount(Number((booking as any)?.deskId?.hourlyRate || 0));
+        if (deskHourlyRate <= 0) {
+          return ApiResponses.badRequest('Không xác định được giá giờ lẻ của bàn hiện tại');
+        }
+
+        const oddHourInventoryItem = await InventoryItem.findOneAndUpdate(
+          { sku: PUBLIC_ODD_HOUR_SKU },
+          {
+            $setOnInsert: {
+              sku: PUBLIC_ODD_HOUR_SKU,
+              name: 'Giờ lẻ',
+              description: 'Gia hạn theo giờ lẻ, không bao gồm nước',
+              category: 'combo',
+              price: deskHourlyRate,
+              quantity: 999999,
+              lowStockThreshold: 0,
+              unit: 'giờ',
+              isActive: true,
+              type: 'item',
+              pricePerPerson: false,
+              duration: 1,
+              includedItems: [],
+            },
+          },
+          { new: true, upsert: true }
+        );
+
+        const normalizedPrice = deskHourlyRate;
+        const normalizedQty = Math.floor(quantity);
+        const subtotal = normalizedPrice * normalizedQty;
+
+        orderItems.push({
+          itemId: oddHourInventoryItem._id,
+          name: 'Giờ lẻ',
+          price: normalizedPrice,
+          quantity: normalizedQty,
+          subtotal,
+        });
+
+        totalAmount += subtotal;
+        continue;
+      }
 
       if (!mongoose.Types.ObjectId.isValid(actualItemId)) {
         return ApiResponses.badRequest(`Invalid item ID: ${actualItemId}`);
@@ -122,6 +173,11 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
 
       if (!inventoryItem.isActive) {
         return ApiResponses.badRequest(`Item is not available: ${inventoryItem.name}`);
+      }
+
+      // Public rule: meeting-room combo (pricePerPerson=true) is not supported in public ordering
+      if (inventoryItem.category === 'combo' && inventoryItem.pricePerPerson) {
+        return ApiResponses.badRequest(`Combo theo đầu người chưa hỗ trợ trên trang khách: ${inventoryItem.name}`);
       }
 
       // Add to order items (no stock check — staff will verify when delivering)
@@ -153,7 +209,7 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       type: 'income',
       amount: totalAmount,
       source: 'order',
-      description: `Order from booking ${bookingId}`,
+      description: `Đơn gọi thêm từ khách (booking ${bookingId})`,
       referenceId: order._id,
       referenceModel: 'Order'
     });

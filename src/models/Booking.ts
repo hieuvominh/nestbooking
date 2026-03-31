@@ -18,6 +18,14 @@ export interface IBooking extends Document {
   discountPercent?: number;
   discountAmount?: number;
   promoCode?: string;
+  appliedVoucher?: {
+    voucherId?: mongoose.Types.ObjectId;
+    code: string;
+    type: 'fixed_amount' | 'percent' | 'combo_price_override' | 'per_person_price_override';
+    value: number;
+    discountApplied: number;
+    appliedAt: Date;
+  };
   paymentStatus: 'pending' | 'paid' | 'refunded';
   publicToken?: string;
   publicShortCode?: string;
@@ -102,6 +110,33 @@ const BookingSchema = new Schema<IBooking>(
       type: String,
       trim: true,
       default: undefined,
+    },
+    appliedVoucher: {
+      voucherId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Voucher',
+        default: undefined,
+      },
+      code: {
+        type: String,
+        trim: true,
+        uppercase: true,
+      },
+      type: {
+        type: String,
+        enum: ['fixed_amount', 'percent', 'combo_price_override', 'per_person_price_override'],
+      },
+      value: {
+        type: Number,
+        min: 0,
+      },
+      discountApplied: {
+        type: Number,
+        min: 0,
+      },
+      appliedAt: {
+        type: Date,
+      },
     },
     paymentStatus: {
       type: String,

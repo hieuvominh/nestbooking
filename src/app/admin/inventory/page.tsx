@@ -106,7 +106,7 @@ export default function InventoryPage() {
   const { data: inventory, mutate: mutateInventory } = useApi<InventoryItem[]>(
     "/api/inventory",
     {
-      refreshInterval: 10000, // Poll every 10 seconds
+      refreshInterval: 20000, // Poll every 10 seconds
     },
   );
   const { data: ordersResponse, mutate: mutateOrders } = useApi<OrdersResponse>(

@@ -67,6 +67,7 @@ export default function ShiftInventoryPage() {
 
   const [allocateQty, setAllocateQty] = useState<Record<string, string>>({});
   const [actualQty, setActualQty] = useState<Record<string, string>>({});
+  const [justReconciled, setJustReconciled] = useState(false);
 
   const shiftMap = useMemo(() => {
     const map = new Map<string, ShiftItem>();
@@ -87,8 +88,15 @@ export default function ShiftInventoryPage() {
         next[String(it.itemId._id)] = String(Math.max(0, remaining));
       }
     });
-    setActualQty((prev) => ({ ...next, ...prev }));
+    // Reset to current shift's items only, avoid carrying stale keys
+    // from previously viewed date/shift that can break reconcile payload.
+    setActualQty(next);
   }, [shiftData?.items]);
+
+  useEffect(() => {
+    // Reset optimistic reconcile marker when user switches date/shift view.
+    setJustReconciled(false);
+  }, [selectedDate, selectedShift]);
 
   const handleAllocate = async () => {
     if (!isAdmin) {
@@ -110,7 +118,7 @@ export default function ShiftInventoryPage() {
         body: { dateKey: selectedDate, shiftCode: selectedShift, items },
       });
       setAllocateQty({});
-      mutate();
+      await mutate();
       toast.success("Đã cấp hàng cho ca");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Cấp hàng thất bại");
@@ -118,12 +126,18 @@ export default function ShiftInventoryPage() {
   };
 
   const isReconciled =
-    (shiftData?.items?.length ?? 0) > 0 &&
-    shiftData!.items.every((it) => it.reconciledAt);
+    justReconciled ||
+    ((shiftData?.items?.length ?? 0) > 0 &&
+      shiftData!.items.every((it) => it.reconciledAt));
 
   const handleReconcile = async () => {
     if (isReconciled) return;
+    const currentShiftItemIds = new Set(
+      (shiftData?.items || []).map((it) => String(it.itemId._id)),
+    );
+
     const items = Object.entries(actualQty)
+      .filter(([itemId]) => currentShiftItemIds.has(String(itemId)))
       .map(([itemId, qty]) => ({ itemId, actualQty: Number(qty) }))
       .filter((i) => !Number.isNaN(i.actualQty));
 
@@ -137,9 +151,12 @@ export default function ShiftInventoryPage() {
         method: "POST",
         body: { dateKey: selectedDate, shiftCode: selectedShift, items },
       });
-      mutate();
+      // Optimistic UI: apply reconciled state immediately.
+      setJustReconciled(true);
+      await mutate();
       toast.success("Đã kết ca và trả tồn về kho tổng");
     } catch (error) {
+      setJustReconciled(false);
       toast.error(error instanceof Error ? error.message : "Kết ca thất bại");
     }
   };

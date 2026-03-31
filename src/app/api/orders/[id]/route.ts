@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
 import connectDB from '@/lib/mongodb';
-import { Order } from '@/models';
+import { Booking, InventoryItem, Order } from '@/models';
 import { applyShiftSale } from '@/lib/shift-stock';
 import { withAuth, requireRole, ApiResponses, AuthenticatedRequest } from '@/lib/api-middleware';
 import { getNowInVietnam } from '@/lib/vietnam-time';
+
+const PUBLIC_ODD_HOUR_SKU = 'ODD_HOUR_PUBLIC';
 
 // GET /api/orders/[id] - Get order by ID
 async function getOrder(request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -56,12 +58,79 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
     // Apply shift stock when marking as delivered (only if not already delivered)
     if (status === 'delivered' && previousStatus !== 'delivered') {
       try {
-        await applyShiftSale(
-          currentOrder.items.map((item: any) => ({
-            itemId: String(item.itemId),
-            quantity: Number(item.quantity || 0),
-          }))
-        );
+        // Combo order generated at booking-payment step already applied shift stock
+        // for included components. Skip re-applying to avoid double deduction.
+        if (!currentOrder.isComboOrder) {
+          const itemIds = currentOrder.items
+            .map((item: any) => String(item.itemId || ''))
+            .filter(Boolean);
+
+          const inventoryDocs = await InventoryItem.find({
+            _id: { $in: itemIds },
+          })
+            .select('category type sku duration pricePerPerson')
+            .lean();
+
+          const inventoryMap = new Map(
+            inventoryDocs.map((doc: any) => [String(doc._id), doc])
+          );
+
+          const shiftSaleItems = currentOrder.items
+            .map((item: any) => {
+              const itemId = String(item.itemId || '');
+              const inv: any = inventoryMap.get(itemId);
+              if (!inv) {
+                // Inventory row may be deleted/legacy. Skip to avoid blocking completion.
+                return null;
+              }
+
+              const isServiceLike =
+                inv.category === 'combo' ||
+                inv.type === 'combo' ||
+                inv.sku === PUBLIC_ODD_HOUR_SKU;
+
+              if (isServiceLike) return null;
+
+              return {
+                itemId,
+                quantity: Number(item.quantity || 0),
+              };
+            })
+            .filter(Boolean) as Array<{ itemId: string; quantity: number }>;
+
+          if (shiftSaleItems.length > 0) {
+            await applyShiftSale(shiftSaleItems);
+          }
+
+          // Extend booking end time for duration-based public service combos
+          // (e.g., combo public room 4h, odd-hour item 1h)
+          const extensionHours = currentOrder.items.reduce((sum: number, item: any) => {
+            const inv: any = inventoryMap.get(String(item.itemId || ''));
+            if (!inv) return sum;
+
+            const duration = Number(inv.duration || 0);
+            const quantity = Number(item.quantity || 0);
+            const isDurationServiceCombo =
+              inv.category === 'combo' &&
+              duration > 0 &&
+              !inv.pricePerPerson;
+
+            if (!isDurationServiceCombo || quantity <= 0) return sum;
+
+            return sum + duration * quantity;
+          }, 0);
+
+          if (extensionHours > 0) {
+            const booking = await Booking.findById(currentOrder.bookingId);
+            if (booking && booking.status !== 'cancelled' && booking.status !== 'completed') {
+              const now = getNowInVietnam();
+              const currentEnd = new Date(booking.endTime);
+              const baseTime = currentEnd > now ? currentEnd : now;
+              booking.endTime = new Date(baseTime.getTime() + extensionHours * 60 * 60 * 1000);
+              await booking.save();
+            }
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Lỗi kho ca';
         return ApiResponses.badRequest(msg);

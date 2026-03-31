@@ -25,10 +25,12 @@ interface Booking {
   desk: {
     label: string;
     location?: string;
+    hourlyRate?: number;
   };
   startTime: string;
   endTime: string;
   status: "confirmed" | "checked-in" | "completed" | "cancelled";
+  isMeetingRoomBooking?: boolean;
   checkInTime?: string;
   signature?: string;
 }
@@ -39,9 +41,17 @@ interface InventoryItem {
   description: string;
   price: number;
   stock: number;
-  category: "food" | "drinks" | "snacks" | "supplies";
+  category:
+    | "food"
+    | "beverage"
+    | "merchandise"
+    | "office-supplies"
+    | "combo"
+    | string;
   isAvailable: boolean;
   image?: string;
+  pricePerPerson?: boolean;
+  duration?: number;
 }
 
 interface CartItem {
@@ -73,6 +83,7 @@ interface ExistingOrder {
 }
 
 export default function PublicBookingPage() {
+  const ODD_HOUR_ITEM_ID = "__ODD_HOUR__";
   const params = useParams();
   const searchParams = useSearchParams();
   const bookingId = params.bookingId as string;
@@ -187,6 +198,8 @@ export default function PublicBookingPage() {
             category: item.category,
             isAvailable: true,
             image: item.imageUrl,
+            pricePerPerson: Boolean(item.pricePerPerson),
+            duration: item.duration,
           })),
         );
       } else {
@@ -402,6 +415,32 @@ export default function PublicBookingPage() {
     );
   };
 
+  const isMeetingRoomBooking = Boolean(booking?.isMeetingRoomBooking);
+
+  const oddHourItem: InventoryItem | null =
+    !isMeetingRoomBooking && booking?.desk?.hourlyRate
+    ? {
+        _id: ODD_HOUR_ITEM_ID,
+        name: "Giờ lẻ",
+        description: "Gia hạn theo giờ lẻ, không bao gồm nước",
+        price: booking.desk.hourlyRate,
+        stock: 999999,
+        category: "hourly",
+        isAvailable: true,
+      }
+    : null;
+
+  const comboItems = isMeetingRoomBooking
+    ? []
+    : [
+        ...inventory.filter(
+          (item) => item.category === "combo" && !item.pricePerPerson,
+        ),
+        ...(oddHourItem ? [oddHourItem] : []),
+      ];
+
+  const regularItems = inventory.filter((item) => item.category !== "combo");
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -558,8 +597,95 @@ export default function PublicBookingPage() {
               <CardDescription>Chọn món và gửi yêu cầu</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {inventory.map((item) => {
+              {comboItems.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-2 text-sm font-semibold text-gray-700">
+                    Giờ thêm
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {comboItems.map((item) => {
+                      const cartItem = cart.find(
+                        (cartItem) => cartItem.itemId === item._id,
+                      );
+                      const cartQuantity = cartItem ? cartItem.quantity : 0;
+
+                      return (
+                        <div
+                          key={item._id}
+                          className="rounded-lg border bg-white p-3"
+                        >
+                          {item.image && (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="h-24 w-full rounded object-cover"
+                            />
+                          )}
+                          <div className="mt-2">
+                            <p className="text-sm font-medium">{item.name}</p>
+                            {item.description && (
+                              <p className="text-xs text-gray-500 line-clamp-2">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-green-600">
+                              {formatCurrency(item.price)}
+                            </span>
+                            {cartQuantity > 0 && (
+                              <span className="text-[11px] text-blue-600">
+                                {cartQuantity} trong giỏ
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-col gap-2">
+                            <Button
+                              onClick={() => addToCart(item)}
+                              className="w-full"
+                              size="sm"
+                            >
+                              Thêm
+                            </Button>
+                            {cartQuantity > 0 && (
+                              <div className="flex items-center justify-between rounded-md border px-2 py-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    updateCartQuantity(item._id, cartQuantity - 1)
+                                  }
+                                  className="h-7 w-7 p-0"
+                                >
+                                  -
+                                </Button>
+                                <span className="text-sm font-medium">
+                                  {cartQuantity}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    updateCartQuantity(item._id, cartQuantity + 1)
+                                  }
+                                  className="h-7 w-7 p-0"
+                                >
+                                  +
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="mb-2 text-sm font-semibold text-gray-700">Món khác</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {regularItems.map((item) => {
                   const cartItem = cart.find(
                     (cartItem) => cartItem.itemId === item._id,
                   );
@@ -633,10 +759,11 @@ export default function PublicBookingPage() {
                       </div>
                     </div>
                   );
-                })}
+                  })}
+                </div>
               </div>
 
-              {inventory.length === 0 && (
+              {!oddHourItem && comboItems.length === 0 && regularItems.length === 0 && (
                 <div className="text-center py-8">
                   <p className="text-gray-500">Hiện chưa có món để gọi.</p>
                   <p className="text-xs text-gray-400 mt-2">
