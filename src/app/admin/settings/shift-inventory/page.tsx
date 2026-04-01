@@ -45,7 +45,7 @@ interface ShiftItem {
 
 interface ShiftResponse {
   dateKey: string;
-  shiftCode: "S1" | "S2" | "S3";
+  shiftCode: string;
   items: ShiftItem[];
 }
 
@@ -55,9 +55,7 @@ export default function ShiftInventoryPage() {
   const todayKey = getShiftDateKey();
   const currentShift = getShiftCode();
   const [selectedDate, setSelectedDate] = useState<string>(todayKey);
-  const [selectedShift, setSelectedShift] = useState<"S1" | "S2" | "S3">(
-    currentShift || "S1",
-  );
+  const selectedShift: "S1" = currentShift || "S1";
   const { apiCall } = useApi();
 
   const { data: inventory } = useApi<InventoryItem[]>("/api/inventory");
@@ -68,6 +66,7 @@ export default function ShiftInventoryPage() {
   const [allocateQty, setAllocateQty] = useState<Record<string, string>>({});
   const [actualQty, setActualQty] = useState<Record<string, string>>({});
   const [justReconciled, setJustReconciled] = useState(false);
+  const effectiveShiftCode = shiftData?.shiftCode || selectedShift;
 
   const shiftMap = useMemo(() => {
     const map = new Map<string, ShiftItem>();
@@ -94,9 +93,9 @@ export default function ShiftInventoryPage() {
   }, [shiftData?.items]);
 
   useEffect(() => {
-    // Reset optimistic reconcile marker when user switches date/shift view.
+    // Reset optimistic reconcile marker when user switches date view.
     setJustReconciled(false);
-  }, [selectedDate, selectedShift]);
+  }, [selectedDate]);
 
   const handleAllocate = async () => {
     if (!isAdmin) {
@@ -173,7 +172,8 @@ export default function ShiftInventoryPage() {
           )}
         </div>
         <p className="text-gray-600">
-          Ngày {selectedDate} - Ca {selectedShift}
+          Ngày {selectedDate} - Ca {effectiveShiftCode}
+          {effectiveShiftCode !== "S1" && " (dữ liệu legacy)"}
         </p>
       </div>
 
@@ -195,18 +195,7 @@ export default function ShiftInventoryPage() {
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Ca</label>
-            <div className="flex gap-2">
-              {(["S1", "S2", "S3"] as const).map((code) => (
-                <Button
-                  key={code}
-                  type="button"
-                  variant={selectedShift === code ? "default" : "outline"}
-                  onClick={() => setSelectedShift(code)}
-                >
-                  {code}
-                </Button>
-              ))}
-            </div>
+            <Badge variant="outline">S1 (08:00 - 22:00)</Badge>
           </div>
         </CardContent>
       </Card>

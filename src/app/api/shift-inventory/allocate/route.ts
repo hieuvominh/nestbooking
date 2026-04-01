@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { InventoryItem, ShiftInventory } from '@/models';
 import { ApiResponses, requireRole } from '@/lib/api-middleware';
-import { getShiftCode, getShiftDateKey } from '@/lib/shift';
+import { getShiftDateKey } from '@/lib/shift';
+import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
 
 interface AllocateItem {
   itemId: string;
@@ -16,7 +17,7 @@ async function allocateToShift(request: NextRequest) {
     const body = await request.json();
     const items: AllocateItem[] = body.items || [];
     const dateKey = body.dateKey || getShiftDateKey();
-    const shiftCode = body.shiftCode || getShiftCode() || 'S1';
+    const shiftCode = await resolveEffectiveShiftCode(dateKey);
 
     if (!Array.isArray(items) || items.length === 0) {
       return ApiResponses.badRequest('Missing items');

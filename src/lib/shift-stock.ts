@@ -1,5 +1,6 @@
 import { ShiftInventory } from '@/models';
 import { getShiftCode, getShiftDateKey, isWithinShift } from '@/lib/shift';
+import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
 
 export interface ShiftSaleItem {
   itemId: string;
@@ -7,9 +8,8 @@ export interface ShiftSaleItem {
 }
 
 export async function applyShiftSale(items: ShiftSaleItem[]) {
-  const shiftCode = getShiftCode();
-  const resolvedShift = shiftCode || 'S1';
   const dateKey = getShiftDateKey();
+  const resolvedShift = await resolveEffectiveShiftCode(dateKey);
 
   for (const item of items) {
     const qty = Number(item.quantity || 0);
@@ -28,7 +28,7 @@ export async function applyShiftSale(items: ShiftSaleItem[]) {
         itemId: item.itemId,
       }).lean();
       if (anyRecord?.reconciledAt) {
-        if (isWithinShift(resolvedShift)) {
+        if (isWithinShift('S1')) {
           // If still within shift hours, allow selling even if reconciled earlier
           existing = await ShiftInventory.findOne({
             dateKey,
@@ -56,9 +56,8 @@ export async function rollbackShiftSale(
   items: ShiftSaleItem[],
   soldAt: Date = new Date()
 ) {
-  const shiftCode = getShiftCode(soldAt);
-  const resolvedShift = shiftCode || "S1";
   const dateKey = getShiftDateKey(soldAt);
+  const resolvedShift = await resolveEffectiveShiftCode(dateKey);
 
   for (const item of items) {
     const qty = Number(item.quantity || 0);

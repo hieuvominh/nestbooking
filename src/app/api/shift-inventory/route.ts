@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { ShiftInventory } from '@/models';
 import { ApiResponses, requireRole } from '@/lib/api-middleware';
-import { getShiftCode, getShiftDateKey } from '@/lib/shift';
+import { getShiftDateKey } from '@/lib/shift';
+import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
 
 // GET /api/shift-inventory?dateKey=YYYY-MM-DD&shiftCode=S1
 async function getShiftInventory(request: NextRequest) {
@@ -10,7 +11,7 @@ async function getShiftInventory(request: NextRequest) {
     await connectDB();
     const { searchParams } = new URL(request.url);
     const dateKey = searchParams.get('dateKey') || getShiftDateKey();
-    const shiftCode = searchParams.get('shiftCode') || getShiftCode() || 'S1';
+    const shiftCode = await resolveEffectiveShiftCode(dateKey);
 
     const items = await ShiftInventory.find({ dateKey, shiftCode })
       .populate('itemId', 'name price category')

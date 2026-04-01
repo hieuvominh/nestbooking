@@ -42,7 +42,7 @@ import {
   Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getShiftCode, getShiftDateKey } from "@/lib/shift";
+import { getShiftDateKey } from "@/lib/shift";
 import {
   getNowInVietnam,
   formatDateTimeLocal,
@@ -126,7 +126,7 @@ export default function CreateBookingPage() {
 
   // Current shift params (computed once on mount)
   const shiftDateKey = getShiftDateKey();
-  const shiftCode = getShiftCode() ?? "S1";
+  const shiftCode: "S1" = "S1";
 
   // Fetch available desks
   const { data: desks, isLoading: desksLoading } = useApi<Desk[]>("/api/desks");

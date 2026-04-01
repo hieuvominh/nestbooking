@@ -1,6 +1,6 @@
 import { toVietnamTime, getVietnamDateString } from "@/lib/vietnam-time";
 
-export type ShiftCode = "S1" | "S2" | "S3";
+export type ShiftCode = "S1";
 
 export interface ShiftDefinition {
   code: ShiftCode;
@@ -9,9 +9,7 @@ export interface ShiftDefinition {
 }
 
 export const SHIFT_DEFINITIONS: ShiftDefinition[] = [
-  { code: "S1", startHour: 8, endHour: 12 },
-  { code: "S2", startHour: 12, endHour: 17 },
-  { code: "S3", startHour: 17, endHour: 22 },
+  { code: "S1", startHour: 8, endHour: 22 },
 ];
 
 export function getShiftCode(date: Date = new Date()): ShiftCode | null {
