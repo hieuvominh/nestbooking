@@ -37,8 +37,6 @@ import {
   Search,
   ShoppingCart,
   CreditCard,
-  X,
-  Check,
   Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -134,6 +132,11 @@ export default function CreateBookingPage() {
     return Math.max(1, Math.floor(parsed));
   };
 
+  const incrementPositiveIntegerInput = (value: string): string => {
+    const current = parsePositiveIntegerInput(value) ?? 0;
+    return String(current + 1);
+  };
+
   // Current shift params (computed once on mount)
   const shiftDateKey = getShiftDateKey();
   const shiftCode: "S1" = "S1";
@@ -202,10 +205,9 @@ export default function CreateBookingPage() {
     setStartPreview(getNowPreview());
   }, [formData.deskId]);
 
-  // Search and filter state
+  // Search and filter state for single items
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"items" | "combos">("items"); // Toggle between items and combos
 
   // Payment state
   const [paymentStatus, setPaymentStatus] = useState<
@@ -377,32 +379,30 @@ export default function CreateBookingPage() {
     toast.info("Đã xóa chọn bàn/gói");
   };
 
-  // Filter inventory based on search, category, and view mode
-  const filteredInventory = useMemo(() => {
+  const filteredCombos = useMemo(() => {
     if (!inventory) return [];
 
     return inventory.filter((item) => {
-      // Combos: use main inventory stock
-      if (viewMode === "combos") {
-        if (item.type !== "combo") return false;
-        if (item.isActive === false) return false;
-      } else {
-        // Single items: use shift inventory stock
-        if (item.type === "combo") return false;
-        if (item.isActive === false) return false;
-        const shiftQty = shiftQtyMap[String(item._id)] ?? 0;
-        if (shiftQty <= 0) return false;
+      if (item.type !== "combo") return false;
+      if (item.isActive === false) return false;
+      return true;
+    });
+  }, [inventory]);
+
+  const filteredSingleItems = useMemo(() => {
+    if (!inventory) return [];
+
+    return inventory.filter((item) => {
+      if (item.type === "combo") return false;
+      if (item.isActive === false) return false;
+
+      const shiftQty = shiftQtyMap[String(item._id)] ?? 0;
+      if (shiftQty <= 0) return false;
+
+      if (categoryFilter !== "all" && item.category !== categoryFilter) {
+        return false;
       }
 
-      // Filter by category (not applicable in combo view)
-      if (
-        viewMode === "items" &&
-        categoryFilter !== "all" &&
-        item.category !== categoryFilter
-      )
-        return false;
-
-      // Filter by search query
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
@@ -414,48 +414,36 @@ export default function CreateBookingPage() {
 
       return true;
     });
-  }, [inventory, searchQuery, categoryFilter, viewMode]);
+  }, [inventory, searchQuery, categoryFilter, shiftQtyMap]);
 
   // Handle combo selection
   const selectCombo = (combo: InventoryItem) => {
+    if (selectedCombo?._id === combo._id) {
+      if (combo.pricePerPerson) {
+        setGuestCountInput((prev) => incrementPositiveIntegerInput(prev));
+        toast.success(`Đã tăng số khách cho ${combo.name}`);
+        return;
+      }
+
+      setComboQuantityInput((prev) => incrementPositiveIntegerInput(prev));
+      toast.success(`Đã tăng số combo cho ${combo.name}`);
+      return;
+    }
+
     setSelectedCombo(combo);
-    setGuestCountInput("");
-    setComboQuantityInput("");
+    setGuestCountInput(combo.pricePerPerson ? "1" : "");
+    setComboQuantityInput(combo.pricePerPerson ? "" : "1");
     toast.success(
       `${combo.name} đã được chọn! Thời lượng: ${combo.duration} giờ`,
     );
   };
 
-  // Clear combo selection
-  const clearCombo = () => {
+  const resetComboSelection = () => {
     setSelectedCombo(null);
     setGuestCountInput("");
     setComboQuantityInput("");
-    // Reset combo and compute endTime from durationHours if startTime exists
-    if (formData.startTime && durationHours > 0) {
-      const [datePart, timePart] = formData.startTime.split("T");
-      const [year, month, day] = datePart.split("-").map(Number);
-      const [hours, minutes] = timePart.split(":").map(Number);
-
-      const startDate = new Date(year, month - 1, day, hours, minutes);
-      const endDate = new Date(
-        startDate.getTime() + durationHours * 60 * 60 * 1000,
-      );
-
-      const endYear = endDate.getFullYear();
-      const endMonth = String(endDate.getMonth() + 1).padStart(2, "0");
-      const endDay = String(endDate.getDate()).padStart(2, "0");
-      const endHours = String(endDate.getHours()).padStart(2, "0");
-      const endMinutes = String(endDate.getMinutes()).padStart(2, "0");
-      const endTimeString = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
-
-      setFormData((prev) => ({ ...prev, endTime: endTimeString }));
-    } else {
-      setFormData((prev) => ({ ...prev, endTime: "" }));
-    }
     setRevealTimeCost(false);
     setVoucherApplied(null);
-    toast.info("Đã xóa combo. Bạn có thể tự chọn thời lượng.");
   };
 
   const clearVoucher = () => {
@@ -901,6 +889,159 @@ export default function CreateBookingPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label>Chọn Gói Combo (tùy chọn)</Label>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Chọn gói combo với thời lượng và giá cố định
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                    {filteredCombos.length === 0 ? (
+                      <div className="col-span-2 text-center py-8 text-gray-500 border rounded-lg">
+                        Không tìm thấy gói combo
+                      </div>
+                    ) : (
+                      filteredCombos.map((combo) => (
+                        <div
+                          key={combo._id}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={selectedCombo?._id === combo._id}
+                          className={`border rounded-lg p-4 transition cursor-pointer ${
+                            selectedCombo?._id === combo._id
+                              ? "border-blue-500 bg-blue-50"
+                              : "border-gray-200 hover:bg-gray-50"
+                          }`}
+                          onClick={() => selectCombo(combo)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              selectCombo(combo);
+                            }
+                          }}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-base">
+                                  {combo.name}
+                                </h4>
+                                {selectedCombo?._id === combo._id && (
+                                  <Badge className="bg-blue-600">Đã Chọn</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 mb-2">
+                                {combo.description}
+                              </p>
+
+                              {combo.duration && (
+                                <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                                  <Clock className="h-3 w-3" />
+                                  <span>
+                                    {combo.duration} giờ
+                                    {combo.pricePerPerson
+                                      ? " / khách"
+                                      : " / gói"}
+                                  </span>
+                                </div>
+                              )}
+
+                              {combo.includedItems &&
+                                combo.includedItems.length > 0 && (
+                                  <div className="text-xs text-gray-500 mb-2">
+                                    <span className="font-semibold">
+                                      Bao gồm:
+                                    </span>
+                                    <ul className="list-disc list-inside ml-2 mt-1">
+                                      {combo.includedItems.map(
+                                        (comp: any, idx: number) => {
+                                          if (!comp) return null;
+                                          if (typeof comp === "string") {
+                                            return <li key={idx}>{comp}</li>;
+                                          }
+
+                                          if (typeof comp === "object") {
+                                            if (comp.name) {
+                                              const qty = comp.quantity
+                                                ? ` x${comp.quantity}`
+                                                : "";
+                                              return (
+                                                <li key={idx}>
+                                                  {comp.name}
+                                                  {qty}
+                                                </li>
+                                              );
+                                            }
+
+                                            const compId =
+                                              typeof comp.item === "string"
+                                                ? comp.item
+                                                : comp.item?._id;
+                                            const found = inventory?.find(
+                                              (it: any) => it._id === compId,
+                                            );
+                                            const label = found
+                                              ? found.name
+                                              : compId || JSON.stringify(comp);
+                                            const qty = comp.quantity
+                                              ? ` x${comp.quantity}`
+                                              : "";
+
+                                            return (
+                                              <li key={idx}>
+                                                {label}
+                                                {qty}
+                                              </li>
+                                            );
+                                          }
+
+                                          return <li key={idx}>{String(comp)}</li>;
+                                        },
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center pt-2 border-t">
+                            <span className="text-xl font-bold text-green-600">
+                              {formatCurrency(combo.price)}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {selectedCombo?._id === combo._id && (
+                                <span className="text-sm font-medium text-gray-600">
+                                  {combo.pricePerPerson
+                                    ? `Khách: ${guestCount ?? 1}`
+                                    : `SL: ${comboQuantity ?? 1}`}
+                                </span>
+                              )}
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-semibold ${
+                                  selectedCombo?._id === combo._id
+                                    ? "border-blue-600 bg-blue-600 text-white"
+                                    : "border-slate-300 bg-white text-slate-700"
+                                }`}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                {selectedCombo?._id === combo._id
+                                  ? "+1 gói"
+                                  : "Bấm để thêm"}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-2">
+                            Có sẵn: {combo.quantity} gói
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 {!selectedCombo && selectedDesk && (
                   <div className="mb-3">
                     <Label htmlFor="durationHours">Số giờ *</Label>
@@ -1011,7 +1152,10 @@ export default function CreateBookingPage() {
                                 );
                               }}
                               onBlur={() => {
-                                if (!guestCountInput.trim()) return;
+                                if (!guestCountInput.trim()) {
+                                  resetComboSelection();
+                                  return;
+                                }
                                 const parsed =
                                   parsePositiveIntegerInput(guestCountInput);
                                 setGuestCountInput(
@@ -1066,7 +1210,10 @@ export default function CreateBookingPage() {
                                   );
                                 }}
                                 onBlur={() => {
-                                  if (!comboQuantityInput.trim()) return;
+                                    if (!comboQuantityInput.trim()) {
+                                      resetComboSelection();
+                                      return;
+                                    }
                                   const parsed =
                                     parsePositiveIntegerInput(
                                       comboQuantityInput,
@@ -1097,16 +1244,11 @@ export default function CreateBookingPage() {
                             </p>
                           </div>
                         )}
+                        <p className="mt-3 text-xs text-gray-600">
+                          Bấm lại vào gói ở trên để tăng nhanh số lượng, hoặc sửa
+                          trực tiếp trong ô nhập.
+                        </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearCombo}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        Gỡ Bỏ
-                      </Button>
                     </div>
                   </div>
                 )}
@@ -1181,54 +1323,24 @@ export default function CreateBookingPage() {
               </CardContent>
             </Card>
 
-            {/* Inventory/Combo Selection */}
+            {/* Inventory Selection */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Package className="h-5 w-5" />
-                      {viewMode === "combos" ? "Chọn Gói Combo" : "Thêm Món"}
-                    </CardTitle>
-                    <CardDescription>
-                      {viewMode === "combos"
-                        ? "Chọn gói combo với thời lượng và giá cố định"
-                        : "Thêm đồ ăn, đồ uống hoặc văn phòng phẩm"}
-                    </CardDescription>
-                  </div>
-                </div>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  Thêm Món
+                </CardTitle>
+                <CardDescription>
+                  Thêm đồ ăn, đồ uống hoặc văn phòng phẩm
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* View Mode Toggle */}
-                <div className="flex flex-col sm:flex-row gap-2 p-1 bg-gray-100 rounded-lg">
-                  <Button
-                    type="button"
-                    variant={viewMode === "combos" ? "default" : "ghost"}
-                    className="flex-1"
-                    onClick={() => setViewMode("combos")}
-                  >
-                    <Package className="h-4 w-4 mr-2" />
-                    Gói Combo
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={viewMode === "items" ? "default" : "ghost"}
-                    className="flex-1"
-                    onClick={() => setViewMode("items")}
-                  >
-                    <ShoppingCart className="h-4 w-4 mr-2" />
-                    Món Đơn Lẻ
-                  </Button>
-                </div>
-
                 {/* Search and Filter */}
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
-                      placeholder={
-                        viewMode === "combos" ? "Tìm combo..." : "Tìm món..."
-                      }
+                      placeholder="Tìm món..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -1249,151 +1361,18 @@ export default function CreateBookingPage() {
                         Văn Phòng Phẩm
                       </SelectItem>
                       <SelectItem value="merchandise">Hàng Hóa</SelectItem>
-                      <SelectItem value="combo">Combo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* Inventory Items Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-                  {filteredInventory.length === 0 ? (
+                  {filteredSingleItems.length === 0 ? (
                     <div className="col-span-2 text-center py-8 text-gray-500">
-                      {viewMode === "combos"
-                        ? "Không tìm thấy gói combo"
-                        : "Không tìm thấy món nào"}
+                      Không tìm thấy món nào
                     </div>
-                  ) : viewMode === "combos" ? (
-                    // Combo Packages View
-                    filteredInventory.map((combo) => (
-                      <div
-                        key={combo._id}
-                        className={`border-2 rounded-lg p-4 transition ${
-                          selectedCombo?._id === combo._id
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-bold text-base">
-                                {combo.name}
-                              </h4>
-                              {selectedCombo?._id === combo._id && (
-                                <Badge className="bg-blue-600">Đã Chọn</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600 mb-2">
-                              {combo.description}
-                            </p>
-
-                            {/* Combo Duration */}
-                            {combo.duration && (
-                              <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
-                                <Clock className="h-3 w-3" />
-                                <span>
-                                  {combo.duration} giờ
-                                  {combo.pricePerPerson ? " / khách" : " / gói"}
-                                </span>
-                              </div>
-                            )}
-
-                            {/* Included Items */}
-                            {combo.includedItems &&
-                              combo.includedItems.length > 0 && (
-                                <div className="text-xs text-gray-500 mb-2">
-                                  <span className="font-semibold">
-                                    Bao gồm:
-                                  </span>
-                                  <ul className="list-disc list-inside ml-2 mt-1">
-                                    {combo.includedItems.map(
-                                      (comp: any, idx: number) => {
-                                        if (!comp) return null;
-                                        // simple string entry
-                                        if (typeof comp === "string")
-                                          return <li key={idx}>{comp}</li>;
-
-                                        // object entry - try to resolve name
-                                        if (typeof comp === "object") {
-                                          // if the component is already populated with a name
-                                          if (comp.name) {
-                                            const qty = comp.quantity
-                                              ? ` x${comp.quantity}`
-                                              : "";
-                                            return (
-                                              <li key={idx}>
-                                                {comp.name}
-                                                {qty}
-                                              </li>
-                                            );
-                                          }
-
-                                          // try to resolve by id using loaded inventory
-                                          const compId =
-                                            typeof comp.item === "string"
-                                              ? comp.item
-                                              : comp.item?._id;
-                                          const found = inventory?.find(
-                                            (it: any) => it._id === compId,
-                                          );
-                                          const label = found
-                                            ? found.name
-                                            : compId || JSON.stringify(comp);
-                                          const qty = comp.quantity
-                                            ? ` x${comp.quantity}`
-                                            : "";
-                                          return (
-                                            <li key={idx}>
-                                              {label}
-                                              {qty}
-                                            </li>
-                                          );
-                                        }
-
-                                        return (
-                                          <li key={idx}>{String(comp)}</li>
-                                        );
-                                      },
-                                    )}
-                                  </ul>
-                                </div>
-                              )}
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-2 border-t">
-                          <span className="text-xl font-bold text-green-600">
-                            {formatCurrency(combo.price)}
-                          </span>
-                          {selectedCombo?._id === combo._id ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={clearCombo}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Gỡ Bỏ
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => selectCombo(combo)}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Chọn
-                            </Button>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-400 mt-2">
-                          Có sẵn: {combo.quantity} gói
-                        </p>
-                      </div>
-                    ))
                   ) : (
-                    // Regular Items View (for cart)
-                    filteredInventory.map((item) => (
+                    filteredSingleItems.map((item) => (
                       <div
                         key={item._id}
                         className="border rounded-lg p-3 hover:bg-gray-50 transition"
