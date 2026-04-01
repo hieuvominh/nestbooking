@@ -17,7 +17,9 @@ async function getShiftInventory(request: NextRequest) {
       .populate('itemId', 'name price category')
       .lean();
 
-    return ApiResponses.success({ dateKey, shiftCode, items });
+    const validItems = items.filter((item) => item.itemId);
+
+    return ApiResponses.success({ dateKey, shiftCode, items: validItems });
   } catch (error) {
     console.error('Get shift inventory error:', error);
     return ApiResponses.serverError('Failed to fetch shift inventory');

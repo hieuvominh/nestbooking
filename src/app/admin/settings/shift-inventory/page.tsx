@@ -34,7 +34,7 @@ interface InventoryItem {
 
 interface ShiftItem {
   _id: string;
-  itemId: InventoryItem;
+  itemId: InventoryItem | null;
   openingQty: number;
   receivedQty: number;
   soldQty: number;
@@ -68,18 +68,31 @@ export default function ShiftInventoryPage() {
   const [justReconciled, setJustReconciled] = useState(false);
   const effectiveShiftCode = shiftData?.shiftCode || selectedShift;
 
+  const validShiftItems = useMemo(
+    () => (shiftData?.items || []).filter((it) => it.itemId),
+    [shiftData?.items],
+  );
+
+  const orphanedShiftItemCount =
+    (shiftData?.items?.length || 0) - validShiftItems.length;
+
   const shiftMap = useMemo(() => {
     const map = new Map<string, ShiftItem>();
-    shiftData?.items?.forEach((it) => {
-      map.set(String(it.itemId?._id || it._id), it);
+    validShiftItems.forEach((it) => {
+      if (!it.itemId) return;
+      map.set(String(it.itemId._id), it);
     });
     return map;
-  }, [shiftData?.items]);
+  }, [validShiftItems]);
 
   useEffect(() => {
-    if (!shiftData?.items) return;
+    if (!validShiftItems.length) {
+      setActualQty({});
+      return;
+    }
     const next: Record<string, string> = {};
-    shiftData.items.forEach((it) => {
+    validShiftItems.forEach((it) => {
+      if (!it.itemId) return;
       if (it.actualQty !== undefined && it.actualQty !== null) {
         next[String(it.itemId._id)] = String(it.actualQty);
       } else {
@@ -90,7 +103,7 @@ export default function ShiftInventoryPage() {
     // Reset to current shift's items only, avoid carrying stale keys
     // from previously viewed date/shift that can break reconcile payload.
     setActualQty(next);
-  }, [shiftData?.items]);
+  }, [validShiftItems]);
 
   useEffect(() => {
     // Reset optimistic reconcile marker when user switches date view.
@@ -126,13 +139,16 @@ export default function ShiftInventoryPage() {
 
   const isReconciled =
     justReconciled ||
-    ((shiftData?.items?.length ?? 0) > 0 &&
-      shiftData!.items.every((it) => it.reconciledAt));
+    (validShiftItems.length > 0 &&
+      validShiftItems.every((it) => it.reconciledAt));
 
   const handleReconcile = async () => {
     if (isReconciled) return;
     const currentShiftItemIds = new Set(
-      (shiftData?.items || []).map((it) => String(it.itemId._id)),
+      validShiftItems
+        .map((it) => it.itemId?._id)
+        .filter((itemId): itemId is string => Boolean(itemId))
+        .map(String),
     );
 
     const items = Object.entries(actualQty)
@@ -175,6 +191,12 @@ export default function ShiftInventoryPage() {
           Ngày {selectedDate} - Ca {effectiveShiftCode}
           {effectiveShiftCode !== "S1" && " (dữ liệu legacy)"}
         </p>
+        {orphanedShiftItemCount > 0 && (
+          <p className="text-sm text-amber-600 mt-2">
+            Có {orphanedShiftItemCount} bản ghi kho ca đang tham chiếu tới mặt
+            hàng đã bị xóa, nên đã được bỏ qua để tránh lỗi hiển thị.
+          </p>
+        )}
       </div>
 
       <Card>
@@ -288,10 +310,12 @@ export default function ShiftInventoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {shiftData?.items?.map((item) => {
+              {validShiftItems.map((item) => {
+                const itemId = item.itemId;
+                if (!itemId) return null;
                 const expected =
                   item.openingQty + item.receivedQty - item.soldQty;
-                const entered = actualQty[item.itemId._id];
+                const entered = actualQty[itemId?._id];
                 const hasValue = entered !== undefined && entered !== "";
                 const matched = hasValue && Number(entered) === expected;
                 const rowColor = !isReconciled
@@ -300,10 +324,8 @@ export default function ShiftInventoryPage() {
                     ? "bg-green-50"
                     : "bg-red-50";
                 return (
-                  <TableRow key={item._id} className={rowColor}>
-                    <TableCell className="font-medium">
-                      {item.itemId?.name}
-                    </TableCell>
+                  <TableRow key={item?._id} className={rowColor}>
+                    <TableCell className="font-medium">{itemId.name}</TableCell>
                     <TableCell>{expected}</TableCell>
                     <TableCell>{item.soldQty}</TableCell>
                     <TableCell>
@@ -322,7 +344,7 @@ export default function ShiftInventoryPage() {
                         onChange={(e) =>
                           setActualQty((prev) => ({
                             ...prev,
-                            [item.itemId._id]: e.target.value,
+                            [itemId?._id]: e.target.value,
                           }))
                         }
                       />
