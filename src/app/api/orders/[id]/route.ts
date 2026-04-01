@@ -52,7 +52,7 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
 
     // If status is being changed to 'delivered', set deliveredAt
     if (status === 'delivered' && !deliveredAt) {
-      updateData.deliveredAt = getNowInVietnam();
+      updateData.deliveredAt = new Date(); // Store UTC timestamp
     }
 
     // Apply shift stock when marking as delivered (only if not already delivered)
@@ -123,9 +123,10 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
           if (extensionHours > 0) {
             const booking = await Booking.findById(currentOrder.bookingId);
             if (booking && booking.status !== 'cancelled' && booking.status !== 'completed') {
-              const now = getNowInVietnam();
+              // Convert getNowInVietnam() to UTC for correct comparison with DB endTime
+              const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
               const currentEnd = new Date(booking.endTime);
-              const baseTime = currentEnd > now ? currentEnd : now;
+              const baseTime = currentEnd > nowUtc ? currentEnd : nowUtc;
               booking.endTime = new Date(baseTime.getTime() + extensionHours * 60 * 60 * 1000);
               await booking.save();
             }

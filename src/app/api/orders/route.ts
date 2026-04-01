@@ -83,7 +83,7 @@ async function createOrder(request: AuthenticatedRequest) {
       total,
       status: 'pending',
       notes,
-      orderedAt: getNowInVietnam()
+      orderedAt: new Date(), // Store UTC timestamp
     });
 
     await order.save();

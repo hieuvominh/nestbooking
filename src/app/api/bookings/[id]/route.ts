@@ -355,10 +355,10 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
 
     // Handle check-in
     if (status === 'checked-in' && booking.status !== 'checked-in') {
-      updateData.checkedInAt = getNowInVietnam();
+      updateData.checkedInAt = new Date(); // Store UTC timestamp
     }
     if (status === 'completed' && booking.status !== 'completed') {
-      updateData.completedAt = getNowInVietnam();
+      updateData.completedAt = new Date(); // Store UTC timestamp
     }
 
 

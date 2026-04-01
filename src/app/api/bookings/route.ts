@@ -75,9 +75,13 @@ async function getBookings(request: AuthenticatedRequest) {
 
     // Auto-cancel no-show confirmed bookings and auto-complete active bookings.
     // This keeps the booking statuses up-to-date without relying on a worker.
-    // NOTE: Using Vietnam time (UTC+7) for consistency with business logic
+    // NOTE: We use UTC for MongoDB comparisons (startTime/endTime stored as UTC)
+    // but preserve Vietnam time for logging/timestamps
     try {
-      const now = getNowInVietnam();
+      const nowVietnam = getNowInVietnam();
+      // Convert back to UTC for MongoDB queries (subtract 7 hours from the offset value)
+      const now = new Date(nowVietnam.getTime() - 7 * 60 * 60 * 1000);
+      
       const parsedNoShow = parseInt(
         process.env.BOOKING_NO_SHOW_MINUTES || '30',
         10
@@ -331,7 +335,7 @@ async function createBooking(request: AuthenticatedRequest) {
         type: voucherDoc.type,
         value: voucherDoc.value,
         discountApplied: normalizedDiscountAmount,
-        appliedAt: getNowInVietnam(),
+        appliedAt: new Date(), // Store UTC timestamp
       };
     } else {
       // Legacy manual discount path (no voucher)
@@ -345,8 +349,10 @@ async function createBooking(request: AuthenticatedRequest) {
       normalizedTotalAmount = Math.max(0, normalizedSubtotalAmount - normalizedDiscountAmount);
     }
     // Auto-status: if startTime is now or past (in Vietnam time), mark as checked-in
+    // Note: Convert getNowInVietnam() to UTC for correct comparison with DB startTime
+    const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
     const resolvedStatus =
-      status || (start <= getNowInVietnam() ? 'checked-in' : 'confirmed');
+      status || (start <= nowUtc ? 'checked-in' : 'confirmed');
     const resolvedPaymentStatus =
       resolvedStatus === "checked-in"
         ? "paid"
@@ -378,11 +384,11 @@ async function createBooking(request: AuthenticatedRequest) {
       }
     }
 
-    // Note: Store Vietnam time as UTC in DB (getNowInVietnam already converts)
+    // Note: Store UTC timestamps in DB for consistency
     if (checkedInAt) {
       bookingData.checkedInAt = new Date(checkedInAt);
     } else if (resolvedStatus === 'checked-in') {
-      bookingData.checkedInAt = getNowInVietnam();
+      bookingData.checkedInAt = new Date(); // Store UTC timestamp
     }
 
     // Create booking

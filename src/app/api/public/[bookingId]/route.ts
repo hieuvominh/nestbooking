@@ -120,14 +120,15 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
       return ApiResponses.badRequest('Booking must be confirmed to check in');
     }
 
-    const now = getNowInVietnam();
+    // Convert getNowInVietnam() to UTC for correct comparison with DB times (startTime/endTime stored in UTC)
+    const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
     const startTime = new Date(booking.startTime);
     const endTime = new Date(booking.endTime);
 
     // Allow check-in 15 minutes before start time
     const earlyCheckInTime = new Date(startTime.getTime() - 15 * 60 * 1000);
 
-    if (now < earlyCheckInTime) {
+    if (nowUtc < earlyCheckInTime) {
       return ApiResponses.badRequest('Check-in is not available yet');
     }
 
@@ -137,7 +138,7 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
 
     // Update booking status
     booking.status = 'checked-in';
-    booking.checkedInAt = getNowInVietnam();
+    booking.checkedInAt = new Date(); // Store UTC timestamp
     await booking.save();
 
     return ApiResponses.success({

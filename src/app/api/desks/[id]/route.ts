@@ -68,11 +68,12 @@ async function updateDesk(request: AuthenticatedRequest, { params }: DeskParams)
 
     // If changing to maintenance, check for active bookings
     if (status === 'maintenance') {
-      const now = getNowInVietnam();
+      // Convert getNowInVietnam() to UTC for correct MongoDB query (startTime/endTime stored in UTC)
+      const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
       const activeBooking = await Booking.findOne({
         deskId: id,
-        startTime: { $lte: now },
-        endTime: { $gte: now },
+        startTime: { $lte: nowUtc },
+        endTime: { $gte: nowUtc },
         status: { $in: ['confirmed', 'checked-in'] }
       });
 

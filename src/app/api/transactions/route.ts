@@ -42,10 +42,12 @@ async function getTransactions(request: AuthenticatedRequest) {
         $lte: endOfMonth(new Date(year, monthNum - 1)),
       };
     } else {
-      const now = getNowInVietnam();
+      // When no month specified, query current month in Vietnam timezone
+      // Convert getNowInVietnam() to UTC for correct date calculation
+      const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
       dateQuery.date = {
-        $gte: startOfMonth(now),
-        $lte: endOfMonth(now),
+        $gte: startOfMonth(nowUtc),
+        $lte: endOfMonth(nowUtc),
       };
     }
 

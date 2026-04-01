@@ -54,7 +54,7 @@ async function reconcileShift(request: NextRequest) {
 
       shift.actualQty = actualQty;
       shift.variance = actualQty - expectedQty;
-      shift.reconciledAt = getNowInVietnam();
+      shift.reconciledAt = new Date(); // Store UTC timestamp
       await shift.save();
     }
 
