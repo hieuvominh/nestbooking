@@ -4,6 +4,14 @@ import { useMemo, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   Table,
@@ -97,6 +105,15 @@ export default function InventoryPage() {
     Record<string, { quantity: string; totalCost: string; note: string }>
   >({});
   const [restockLoading, setRestockLoading] = useState(false);
+  const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    actualQuantity: "0",
+    costDelta: "0",
+    note: "",
+  });
+  const [adjustmentLoading, setAdjustmentLoading] = useState(false);
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
+  const [adjustmentSuccess, setAdjustmentSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
@@ -236,12 +253,69 @@ export default function InventoryPage() {
     }
   };
 
+  const openAdjustmentDialog = (item: InventoryItem) => {
+    const currentQuantity = String((item as any).quantity ?? item.stock ?? 0);
+    setAdjustingItem(item);
+    setAdjustmentForm({
+      actualQuantity: currentQuantity,
+      costDelta: "0",
+      note: "",
+    });
+    setAdjustmentError(null);
+  };
+
+  const closeAdjustmentDialog = () => {
+    if (adjustmentLoading) return;
+    setAdjustingItem(null);
+    setAdjustmentError(null);
+  };
+
+  const handleInventoryAdjustment = async () => {
+    if (!adjustingItem) return;
+
+    const actualQuantity = Number(adjustmentForm.actualQuantity);
+    const costDelta = Number(adjustmentForm.costDelta || "0");
+
+    if (!Number.isFinite(actualQuantity) || actualQuantity < 0) {
+      setAdjustmentError("Tồn kho thực tế phải lớn hơn hoặc bằng 0.");
+      return;
+    }
+
+    if (!Number.isFinite(costDelta)) {
+      setAdjustmentError("Chi phí điều chỉnh phải là một số hợp lệ.");
+      return;
+    }
+
+    setAdjustmentLoading(true);
+    setAdjustmentError(null);
+
+    try {
+      await apiCall(`/api/inventory/${adjustingItem._id}/adjustment`, {
+        method: "POST",
+        body: {
+          actualQuantity,
+          costDelta,
+          note: adjustmentForm.note.trim() || undefined,
+        },
+      });
+      mutateInventory();
+      setAdjustmentSuccess(`Đã điều chỉnh ${adjustingItem.name} thành công.`);
+      setAdjustingItem(null);
+    } catch (error) {
+      setAdjustmentError(
+        error instanceof Error ? error.message : "Không thể điều chỉnh mặt hàng.",
+      );
+    } finally {
+      setAdjustmentLoading(false);
+    }
+  };
+
   const handleBulkRestock = async () => {
     const entries = Object.entries(restockRows).filter(([id, v]) => {
       const item = inventoryById.get(id);
       if (item && ((item as any).type === "combo" || item.category === "combo"))
         return false;
-      return parseFloat(v.quantity) > 0 && parseFloat(v.totalCost) > 0;
+      return parseFloat(v.quantity) > 0 && parseFloat(v.totalCost) >= 0;
     });
     if (entries.length === 0) return;
     setRestockLoading(true);
@@ -872,6 +946,11 @@ export default function InventoryPage() {
               <CardDescription>Quản lý tồn kho và mức tồn</CardDescription>
             </CardHeader>
             <CardContent>
+              {adjustmentSuccess && (
+                <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                  {adjustmentSuccess}
+                </div>
+              )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -948,6 +1027,15 @@ export default function InventoryPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            {!isCombo && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openAdjustmentDialog(item)}
+                              >
+                                Điều chỉnh
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -980,6 +1068,92 @@ export default function InventoryPage() {
                 ))}
             </CardContent>
           </Card>
+
+          <Dialog open={!!adjustingItem} onOpenChange={(open) => !open && closeAdjustmentDialog()}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Điều chỉnh tồn kho</DialogTitle>
+                <DialogDescription>
+                  Set lại số lượng thực tế và ghi nhận chênh lệch chi phí nếu cần.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <div className="font-medium text-slate-900">
+                    {adjustingItem?.name}
+                  </div>
+                  <div>
+                    Tồn kho hiện tại: {adjustingItem ? ((adjustingItem as any).quantity ?? adjustingItem.stock ?? 0) : 0}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tồn kho thực tế</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={adjustmentForm.actualQuantity}
+                    onChange={(e) =>
+                      setAdjustmentForm((prev) => ({
+                        ...prev,
+                        actualQuantity: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Chênh lệch chi phí (VND)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={adjustmentForm.costDelta}
+                    onChange={(e) =>
+                      setAdjustmentForm((prev) => ({
+                        ...prev,
+                        costDelta: e.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500">
+                    Nhập số dương nếu cần cộng thêm chi phí, số âm nếu cần giảm hoặc hoàn chi phí.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Ghi chú</label>
+                  <Input
+                    placeholder="Ví dụ: kiểm kho lại, nhập dư, nhà cung cấp hoàn tiền..."
+                    value={adjustmentForm.note}
+                    onChange={(e) =>
+                      setAdjustmentForm((prev) => ({
+                        ...prev,
+                        note: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                {adjustmentError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {adjustmentError}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={closeAdjustmentDialog} disabled={adjustmentLoading}>
+                  Hủy
+                </Button>
+                <Button onClick={handleInventoryAdjustment} disabled={adjustmentLoading}>
+                  {adjustmentLoading ? "Đang lưu..." : "Lưu điều chỉnh"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
 

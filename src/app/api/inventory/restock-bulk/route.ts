@@ -30,8 +30,8 @@ async function restockBulk(request: AuthenticatedRequest) {
       if (!entry.quantity || entry.quantity <= 0) {
         return ApiResponses.badRequest('Quantity must be greater than 0');
       }
-      if (!entry.cost || entry.cost <= 0) {
-        return ApiResponses.badRequest('Cost must be greater than 0');
+      if (typeof entry.cost !== 'number' || Number.isNaN(entry.cost) || entry.cost < 0) {
+        return ApiResponses.badRequest('Cost must be greater than or equal to 0');
       }
     }
 

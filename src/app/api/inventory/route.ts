@@ -116,6 +116,7 @@ async function createInventoryItem(request: AuthenticatedRequest) {
       type: category === 'combo' ? 'combo' : 'item',
       includedItems: validatedIncludedItems,
     };
+
     // include duration for combo items if provided
     if (category === 'combo' && duration !== undefined) {
       const parsed = Number(duration);
