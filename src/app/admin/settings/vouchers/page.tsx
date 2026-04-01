@@ -166,7 +166,9 @@ export default function VoucherSettingsPage() {
         type: form.type,
         value: normalizeVndAmount(form.value),
         maxDiscount:
-          form.maxDiscount === "" ? undefined : normalizeVndAmount(form.maxDiscount),
+          form.maxDiscount === ""
+            ? undefined
+            : normalizeVndAmount(form.maxDiscount),
         validFrom: dateTimeLocalToUTC(form.validFrom),
         validTo: dateTimeLocalToUTC(form.validTo),
         isActive: form.isActive,
@@ -240,14 +242,17 @@ export default function VoucherSettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Quản lý voucher</h1>
-        <p className="text-gray-500">Tạo và quản lý voucher cho booking/combo</p>
+        <p className="text-gray-500">
+          Tạo và quản lý voucher cho booking/combo
+        </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>{editingId ? "Sửa voucher" : "Tạo voucher mới"}</CardTitle>
           <CardDescription>
-            Voucher áp dụng cho booking/combo. Khách đã thanh toán sẽ không sửa được voucher.
+            Voucher áp dụng cho booking/combo. Khách đã thanh toán sẽ không sửa
+            được voucher.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -258,7 +263,10 @@ export default function VoucherSettingsPage() {
                 <Input
                   value={form.code}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))
+                    setForm((prev) => ({
+                      ...prev,
+                      code: e.target.value.toUpperCase(),
+                    }))
                   }
                   placeholder="VD: MEET15"
                   disabled={Boolean(editingId)}
@@ -269,7 +277,9 @@ export default function VoucherSettingsPage() {
                 <label className="text-sm font-medium">Tên voucher</label>
                 <Input
                   value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, name: e.target.value }))
+                  }
                   placeholder="VD: Meeting Room 15k"
                 />
               </div>
@@ -279,12 +289,17 @@ export default function VoucherSettingsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={form.type}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, type: e.target.value as VoucherType }))
+                    setForm((prev) => ({
+                      ...prev,
+                      type: e.target.value as VoucherType,
+                    }))
                   }
                 >
                   <option value="fixed_amount">Giảm tiền cố định</option>
                   <option value="percent">Giảm %</option>
-                  <option value="combo_price_override">Đặt giá combo cố định</option>
+                  <option value="combo_price_override">
+                    Đặt giá combo cố định
+                  </option>
                   <option value="per_person_price_override">
                     Đặt giá combo theo đầu người
                   </option>
@@ -302,7 +317,10 @@ export default function VoucherSettingsPage() {
                   min={0}
                   value={form.value}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, value: Number(e.target.value) || 0 }))
+                    setForm((prev) => ({
+                      ...prev,
+                      value: Number(e.target.value) || 0,
+                    }))
                   }
                   required
                 />
@@ -316,7 +334,8 @@ export default function VoucherSettingsPage() {
                   onChange={(e) =>
                     setForm((prev) => ({
                       ...prev,
-                      maxDiscount: e.target.value === "" ? "" : Number(e.target.value),
+                      maxDiscount:
+                        e.target.value === "" ? "" : Number(e.target.value),
                     }))
                   }
                   placeholder="Để trống nếu không giới hạn"
@@ -330,7 +349,10 @@ export default function VoucherSettingsPage() {
                     type="checkbox"
                     checked={form.isActive}
                     onChange={(e) =>
-                      setForm((prev) => ({ ...prev, isActive: e.target.checked }))
+                      setForm((prev) => ({
+                        ...prev,
+                        isActive: e.target.checked,
+                      }))
                     }
                   />
                   <label htmlFor="isActive" className="text-sm">
@@ -357,7 +379,9 @@ export default function VoucherSettingsPage() {
                 <Input
                   type="datetime-local"
                   value={form.validTo}
-                  onChange={(e) => setForm((prev) => ({ ...prev, validTo: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, validTo: e.target.value }))
+                  }
                   required
                 />
               </div>
@@ -369,7 +393,10 @@ export default function VoucherSettingsPage() {
                 <Input
                   value={form.description}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, description: e.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
                   }
                   placeholder="Mô tả nội bộ"
                 />
@@ -414,7 +441,9 @@ export default function VoucherSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách voucher</CardTitle>
-          <CardDescription>Tra cứu, bật/tắt, chỉnh sửa hoặc xóa voucher</CardDescription>
+          <CardDescription>
+            Tra cứu, bật/tắt, chỉnh sửa hoặc xóa voucher
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-4">
@@ -443,14 +472,18 @@ export default function VoucherSettingsPage() {
                     <div>
                       <div className="font-medium">{voucher.code}</div>
                       {voucher.name && (
-                        <div className="text-xs text-gray-500">{voucher.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {voucher.name}
+                        </div>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">{typeLabel(voucher.type)}</div>
                     {voucher.applyToPerPersonCombosOnly && (
-                      <div className="text-xs text-blue-600">Per-person combo only</div>
+                      <div className="text-xs text-blue-600">
+                        Per-person combo only
+                      </div>
                     )}
                   </TableCell>
                   <TableCell>
@@ -463,8 +496,13 @@ export default function VoucherSettingsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="text-xs text-gray-600">
-                      <div>Từ: {new Date(voucher.validFrom).toLocaleString("vi-VN")}</div>
-                      <div>Đến: {new Date(voucher.validTo).toLocaleString("vi-VN")}</div>
+                      <div>
+                        Từ:{" "}
+                        {new Date(voucher.validFrom).toLocaleString("vi-VN")}
+                      </div>
+                      <div>
+                        Đến: {new Date(voucher.validTo).toLocaleString("vi-VN")}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -507,7 +545,9 @@ export default function VoucherSettingsPage() {
           </Table>
 
           {!isLoading && filtered.length === 0 && (
-            <div className="text-center py-8 text-gray-500">Chưa có voucher nào</div>
+            <div className="text-center py-8 text-gray-500">
+              Chưa có voucher nào
+            </div>
           )}
         </CardContent>
       </Card>

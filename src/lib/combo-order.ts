@@ -5,12 +5,14 @@ export interface EnsureComboOrderParams {
   bookingId: string;
   comboId: string;
   guestCount?: number;
+  comboQuantity?: number;
 }
 
 export async function ensureComboOrderForPaidBooking({
   bookingId,
   comboId,
-  guestCount = 1
+  guestCount = 1,
+  comboQuantity = 1,
 }: EnsureComboOrderParams) {
   if (!bookingId || !comboId) return null;
 
@@ -28,6 +30,10 @@ export async function ensureComboOrderForPaidBooking({
   if (combo.type !== 'combo' && combo.category !== 'combo') {
     throw new Error('Selected item is not a combo');
   }
+
+  const quantityMultiplier = combo.pricePerPerson
+    ? Math.max(1, guestCount)
+    : Math.max(1, comboQuantity);
 
   const included = Array.isArray(combo.includedItems)
     ? combo.includedItems.filter((it: any) => it && it.item && it.quantity)
@@ -47,7 +53,7 @@ export async function ensureComboOrderForPaidBooking({
 
   const orderItems = included.map((it: any) => {
     const itemId = String(it.item);
-    const qty = (Number(it.quantity || 0) || 0) * Math.max(1, guestCount);
+    const qty = (Number(it.quantity || 0) || 0) * quantityMultiplier;
     const component = componentMap.get(itemId);
     return {
       itemId,
@@ -73,7 +79,7 @@ export async function ensureComboOrderForPaidBooking({
     items: orderItems,
     total,
     status: 'pending',
-    notes: `Combo: ${combo.name}`,
+    notes: `Combo: ${combo.name}${!combo.pricePerPerson && quantityMultiplier > 1 ? ` x${quantityMultiplier}` : ''}`,
     orderedAt: new Date(),
     isComboOrder: true
   });

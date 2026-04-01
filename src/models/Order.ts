@@ -14,6 +14,8 @@ export interface IOrder extends Document {
   items: IOrderItem[];
   total: number;
   isComboOrder?: boolean;
+  serviceExtensionHours?: number;
+  serviceExtensionAppliedAt?: Date;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   notes?: string;
   orderedAt: Date;
@@ -75,6 +77,14 @@ const OrderSchema = new Schema<IOrder>(
     isComboOrder: {
       type: Boolean,
       default: false,
+    },
+    serviceExtensionHours: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    serviceExtensionAppliedAt: {
+      type: Date,
     },
     status: {
       type: String,

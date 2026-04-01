@@ -36,6 +36,7 @@ export interface IBooking extends Document {
   comboId?: mongoose.Types.ObjectId | any;
   isComboBooking?: boolean;
   guestCount?: number;
+  comboQuantity?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -168,6 +169,11 @@ const BookingSchema = new Schema<IBooking>(
       default: false,
     },
     guestCount: {
+      type: Number,
+      min: 1,
+      default: undefined,
+    },
+    comboQuantity: {
       type: Number,
       min: 1,
       default: undefined,

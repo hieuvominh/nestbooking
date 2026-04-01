@@ -59,6 +59,8 @@ interface CartItem {
   itemName: string;
   quantity: number;
   price: number;
+  durationHours?: number;
+  isServiceExtension?: boolean;
 }
 
 interface OrderItem {
@@ -77,7 +79,8 @@ interface ExistingOrder {
   totalAmount?: number;
   total?: number;
   notes?: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  serviceExtensionHours?: number;
+  status: "pending" | "confirmed" | "completed" | "delivered" | "cancelled";
   createdAt: string;
   updatedAt: string;
 }
@@ -138,6 +141,7 @@ export default function PublicBookingPage() {
       case "confirmed":
         return "Đang chờ";
       case "completed":
+      case "delivered":
         return "Đã giao";
       case "cancelled":
         return "Đã hủy";
@@ -305,6 +309,12 @@ export default function PublicBookingPage() {
           itemName: item.name,
           quantity: 1,
           price: item.price,
+          durationHours: item.duration,
+          isServiceExtension:
+            item._id === ODD_HOUR_ITEM_ID ||
+            (item.category === "combo" &&
+              !item.pricePerPerson &&
+              Number(item.duration || 0) > 0),
         },
       ]);
     }
@@ -391,6 +401,7 @@ export default function PublicBookingPage() {
       setCart([]);
       setOrderNote("");
       fetchExistingOrders(); // Refresh orders list
+      fetchBookingData();
       toast.success("Đã gửi đơn thành công!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gửi đơn thất bại");
@@ -407,6 +418,28 @@ export default function PublicBookingPage() {
     return cart.reduce((total, item) => total + item.price * item.quantity, 0);
   };
 
+  const getCartExtensionHours = () => {
+    return cart.reduce(
+      (total, item) =>
+        total +
+        (item.isServiceExtension
+          ? Number(item.durationHours || 0) * item.quantity
+          : 0),
+      0,
+    );
+  };
+
+  const getProjectedEndTime = () => {
+    if (!booking) return null;
+    const extensionHours = getCartExtensionHours();
+    if (extensionHours <= 0) return null;
+
+    const currentEnd = new Date(booking.endTime);
+    const now = new Date();
+    const baseTime = currentEnd > now ? currentEnd : now;
+    return new Date(baseTime.getTime() + extensionHours * 60 * 60 * 1000);
+  };
+
   const getOrdersTotal = () => {
     return existingOrders.reduce(
       (total: number, order: ExistingOrder) =>
@@ -419,16 +452,18 @@ export default function PublicBookingPage() {
 
   const oddHourItem: InventoryItem | null =
     !isMeetingRoomBooking && booking?.desk?.hourlyRate
-    ? {
-        _id: ODD_HOUR_ITEM_ID,
-        name: "Giờ lẻ",
-        description: "Gia hạn theo giờ lẻ, không bao gồm nước",
-        price: booking.desk.hourlyRate,
-        stock: 999999,
-        category: "hourly",
-        isAvailable: true,
-      }
-    : null;
+      ? {
+          _id: ODD_HOUR_ITEM_ID,
+          name: "Giờ lẻ",
+          description: "Gia hạn theo giờ lẻ, không bao gồm nước",
+          price: booking.desk.hourlyRate,
+          stock: 999999,
+          category: "hourly",
+          isAvailable: true,
+          duration: 1,
+          pricePerPerson: false,
+        }
+      : null;
 
   const comboItems = isMeetingRoomBooking
     ? []
@@ -628,6 +663,12 @@ export default function PublicBookingPage() {
                                 {item.description}
                               </p>
                             )}
+                            {Number(item.duration || 0) > 0 && (
+                              <p className="mt-1 text-[11px] text-blue-600">
+                                +{item.duration} giờ /{" "}
+                                {item._id === ODD_HOUR_ITEM_ID ? "giờ" : "gói"}
+                              </p>
+                            )}
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-2">
                             <span className="text-sm font-semibold text-green-600">
@@ -653,7 +694,10 @@ export default function PublicBookingPage() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    updateCartQuantity(item._id, cartQuantity - 1)
+                                    updateCartQuantity(
+                                      item._id,
+                                      cartQuantity - 1,
+                                    )
                                   }
                                   className="h-7 w-7 p-0"
                                 >
@@ -666,7 +710,10 @@ export default function PublicBookingPage() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    updateCartQuantity(item._id, cartQuantity + 1)
+                                    updateCartQuantity(
+                                      item._id,
+                                      cartQuantity + 1,
+                                    )
                                   }
                                   className="h-7 w-7 p-0"
                                 >
@@ -683,94 +730,98 @@ export default function PublicBookingPage() {
               )}
 
               <div>
-                <p className="mb-2 text-sm font-semibold text-gray-700">Món khác</p>
+                <p className="mb-2 text-sm font-semibold text-gray-700">
+                  Món khác
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   {regularItems.map((item) => {
-                  const cartItem = cart.find(
-                    (cartItem) => cartItem.itemId === item._id,
-                  );
-                  const cartQuantity = cartItem ? cartItem.quantity : 0;
+                    const cartItem = cart.find(
+                      (cartItem) => cartItem.itemId === item._id,
+                    );
+                    const cartQuantity = cartItem ? cartItem.quantity : 0;
 
-                  return (
-                    <div
-                      key={item._id}
-                      className="rounded-lg border bg-white p-3"
-                    >
-                      {item.image && (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="h-24 w-full rounded object-cover"
-                        />
-                      )}
-                      <div className="mt-2">
-                        <p className="text-sm font-medium">{item.name}</p>
-                        {item.description && (
-                          <p className="text-xs text-gray-500 line-clamp-2">
-                            {item.description}
-                          </p>
+                    return (
+                      <div
+                        key={item._id}
+                        className="rounded-lg border bg-white p-3"
+                      >
+                        {item.image && (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-24 w-full rounded object-cover"
+                          />
                         )}
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-green-600">
-                          {formatCurrency(item.price)}
-                        </span>
-                        {cartQuantity > 0 && (
-                          <span className="text-[11px] text-blue-600">
-                            {cartQuantity} trong giỏ
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">{item.name}</p>
+                          {item.description && (
+                            <p className="text-xs text-gray-500 line-clamp-2">
+                              {item.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="text-sm font-semibold text-green-600">
+                            {formatCurrency(item.price)}
                           </span>
-                        )}
-                      </div>
-                      <div className="mt-2 flex flex-col gap-2">
-                        <Button
-                          onClick={() => addToCart(item)}
-                          className="w-full"
-                          size="sm"
-                        >
-                          Thêm
-                        </Button>
-                        {cartQuantity > 0 && (
-                          <div className="flex items-center justify-between rounded-md border px-2 py-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                updateCartQuantity(item._id, cartQuantity - 1)
-                              }
-                              className="h-7 w-7 p-0"
-                            >
-                              -
-                            </Button>
-                            <span className="text-sm font-medium">
-                              {cartQuantity}
+                          {cartQuantity > 0 && (
+                            <span className="text-[11px] text-blue-600">
+                              {cartQuantity} trong giỏ
                             </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                updateCartQuantity(item._id, cartQuantity + 1)
-                              }
-                              className="h-7 w-7 p-0"
-                            >
-                              +
-                            </Button>
-                          </div>
-                        )}
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-col gap-2">
+                          <Button
+                            onClick={() => addToCart(item)}
+                            className="w-full"
+                            size="sm"
+                          >
+                            Thêm
+                          </Button>
+                          {cartQuantity > 0 && (
+                            <div className="flex items-center justify-between rounded-md border px-2 py-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  updateCartQuantity(item._id, cartQuantity - 1)
+                                }
+                                className="h-7 w-7 p-0"
+                              >
+                                -
+                              </Button>
+                              <span className="text-sm font-medium">
+                                {cartQuantity}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  updateCartQuantity(item._id, cartQuantity + 1)
+                                }
+                                className="h-7 w-7 p-0"
+                              >
+                                +
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
+                    );
                   })}
                 </div>
               </div>
 
-              {!oddHourItem && comboItems.length === 0 && regularItems.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Hiện chưa có món để gọi.</p>
-                  <p className="text-xs text-gray-400 mt-2">
-                    Vui lòng quay lại sau hoặc liên hệ nhân viên.
-                  </p>
-                </div>
-              )}
+              {!oddHourItem &&
+                comboItems.length === 0 &&
+                regularItems.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">Hiện chưa có món để gọi.</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Vui lòng quay lại sau hoặc liên hệ nhân viên.
+                    </p>
+                  </div>
+                )}
             </CardContent>
           </Card>
         )}
@@ -794,6 +845,14 @@ export default function PublicBookingPage() {
                         <p className="text-xs text-gray-500">
                           {formatCurrency(item.price)} x {item.quantity}
                         </p>
+                        {item.isServiceExtension &&
+                          Number(item.durationHours || 0) > 0 && (
+                            <p className="text-[11px] text-blue-600">
+                              Cộng thêm{" "}
+                              {Number(item.durationHours || 0) * item.quantity}{" "}
+                              giờ
+                            </p>
+                          )}
                       </div>
                       <div className="text-right font-semibold">
                         {formatCurrency(item.price * item.quantity)}
@@ -856,6 +915,21 @@ export default function PublicBookingPage() {
                   {orderNote.length}/200
                 </p>
               </div>
+
+              {getCartExtensionHours() > 0 && getProjectedEndTime() && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                  <p className="text-sm font-semibold text-blue-800">
+                    Tổng giờ cộng thêm: {getCartExtensionHours()} giờ
+                  </p>
+                  <p className="mt-1 text-xs text-blue-700">
+                    Giờ kết thúc dự kiến:{" "}
+                    {formatDateTime(getProjectedEndTime()!.toISOString())}
+                  </p>
+                  <p className="mt-1 text-[11px] text-blue-600">
+                    Giờ sẽ được cộng ngay sau khi gửi đơn.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -881,7 +955,8 @@ export default function PublicBookingPage() {
                         className={`px-2 py-1 rounded text-xs ${
                           order.status === "confirmed"
                             ? "bg-blue-100 text-blue-600"
-                            : order.status === "completed"
+                            : order.status === "completed" ||
+                                order.status === "delivered"
                               ? "bg-green-100 text-green-600"
                               : order.status === "cancelled"
                                 ? "bg-red-100 text-red-600"
@@ -923,18 +998,19 @@ export default function PublicBookingPage() {
                         {order.notes}
                       </div>
                     )}
-                    {order.status === "pending" && (
-                      <div className="mt-3 flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={() => cancelOrder(order._id)}
-                        >
-                          Hủy đơn
-                        </Button>
-                      </div>
-                    )}
+                    {order.status === "pending" &&
+                      !(Number(order.serviceExtensionHours || 0) > 0) && (
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={() => cancelOrder(order._id)}
+                          >
+                            Hủy đơn
+                          </Button>
+                        </div>
+                      )}
                   </div>
                 ))}
               </div>
@@ -956,6 +1032,11 @@ export default function PublicBookingPage() {
               <p className="text-base font-semibold">
                 {formatCurrency(getCartTotal())}
               </p>
+              {getCartExtensionHours() > 0 && (
+                <p className="text-[11px] text-blue-600">
+                  +{getCartExtensionHours()} giờ
+                </p>
+              )}
             </div>
             <Button
               onClick={submitOrder}

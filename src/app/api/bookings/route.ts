@@ -204,7 +204,8 @@ async function createBooking(request: AuthenticatedRequest) {
       voucherCode,
       checkedInAt,
       comboId,
-      guestCount
+      guestCount,
+      comboQuantity
     } = body;
 
     // Validate required fields
@@ -226,7 +227,27 @@ async function createBooking(request: AuthenticatedRequest) {
     }
 
     const start = new Date(startTime);
-    const end = new Date(endTime);
+
+    let combo: any = null;
+    if (comboId) {
+      combo = await InventoryItem.findById(comboId)
+        .select('name price pricePerPerson duration')
+        .lean();
+      if (!combo) {
+        return ApiResponses.badRequest('Combo không tồn tại');
+      }
+    }
+
+    const comboGuests = typeof guestCount === 'number' && guestCount >= 1 ? Math.floor(guestCount) : 1;
+    const comboQty = typeof comboQuantity === 'number' && comboQuantity >= 1 ? Math.floor(comboQuantity) : 1;
+
+    let end = new Date(endTime);
+    if (combo && Number(combo.duration || 0) > 0) {
+      const durationMultiplier = combo.pricePerPerson ? 1 : comboQty;
+      end = new Date(
+        start.getTime() + Number(combo.duration) * durationMultiplier * 60 * 60 * 1000,
+      );
+    }
 
     // Validate dates
     if (start >= end) {
@@ -268,16 +289,8 @@ async function createBooking(request: AuthenticatedRequest) {
 
     // Calculate subtotal amount (combo price OR desk rate x duration)
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    let combo: any = null;
-    if (comboId) {
-      combo = await InventoryItem.findById(comboId).select('name price pricePerPerson').lean();
-      if (!combo) {
-        return ApiResponses.badRequest('Combo không tồn tại');
-      }
-    }
-    const comboGuests = typeof guestCount === 'number' && guestCount >= 1 ? Math.floor(guestCount) : 1;
     const calculatedSubtotal = combo
-      ? normalizeVndAmount(combo.price) * (combo.pricePerPerson ? comboGuests : 1)
+      ? normalizeVndAmount(combo.price) * (combo.pricePerPerson ? comboGuests : comboQty)
       : Math.ceil(durationHours * desk.hourlyRate);
     const normalizedSubtotalAmount =
       typeof subtotalAmount === 'number' && subtotalAmount >= 0
@@ -379,8 +392,10 @@ async function createBooking(request: AuthenticatedRequest) {
     if (comboId) {
       bookingData.comboId = comboId;
       bookingData.isComboBooking = true;
-      if (typeof guestCount === 'number' && guestCount >= 1) {
-        bookingData.guestCount = Math.floor(guestCount);
+      if (combo?.pricePerPerson) {
+        bookingData.guestCount = comboGuests;
+      } else {
+        bookingData.comboQuantity = comboQty;
       }
     }
 
@@ -403,6 +418,7 @@ async function createBooking(request: AuthenticatedRequest) {
           bookingId: booking._id.toString(),
           comboId: String(comboId),
           guestCount: bookingData.guestCount ?? 1,
+          comboQuantity: bookingData.comboQuantity ?? 1,
         });
       } catch (err) {
         // rollback booking so we don't keep a reserved table
@@ -423,9 +439,16 @@ async function createBooking(request: AuthenticatedRequest) {
     // server restart.
     if (bookingData.comboId) {
       try {
+        const fallbackSetData: any = {
+          comboId: bookingData.comboId,
+          isComboBooking: true,
+        };
+        if (bookingData.guestCount) fallbackSetData.guestCount = bookingData.guestCount;
+        if (bookingData.comboQuantity) fallbackSetData.comboQuantity = bookingData.comboQuantity;
+
         await Booking.findByIdAndUpdate(
           booking._id,
-          { $set: { comboId: bookingData.comboId, isComboBooking: true } },
+          { $set: fallbackSetData },
           { strict: false }
         );
         // reload booking document
@@ -482,7 +505,7 @@ async function createBooking(request: AuthenticatedRequest) {
     try {
       await booking.populate([
         { path: 'deskId', select: 'label location hourlyRate' },
-        { path: 'comboId', select: 'name price duration' },
+        { path: 'comboId', select: 'name price duration pricePerPerson' },
       ]);
       bookingForResponse = booking;
     } catch (err) {
@@ -496,7 +519,7 @@ async function createBooking(request: AuthenticatedRequest) {
 
       if (booking.comboId) {
         try {
-          const combo = await InventoryItem.findById(booking.comboId).select('name price duration').lean();
+          const combo = await InventoryItem.findById(booking.comboId).select('name price duration pricePerPerson').lean();
           bookingForResponse = booking.toObject ? booking.toObject() : booking;
           bookingForResponse.comboId = combo;
         } catch (innerErr) {

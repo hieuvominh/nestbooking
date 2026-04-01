@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.unauthorized('Invalid or expired access token');
     }
 
-    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label').lean();
+    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label');
     if (!booking) {
       return ApiResponses.notFound('Booking not found');
     }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     }
 
     // Validate booking exists and is checked in
-    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label').lean();
+    const booking = await Booking.findById(bookingId).populate('deskId', 'hourlyRate label');
     if (!booking) {
       return ApiResponses.notFound('Booking not found');
     }
@@ -103,6 +103,7 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     // Process order items and check inventory
     const orderItems = [];
     let totalAmount = 0;
+    let serviceExtensionHours = 0;
 
     // First pass: Validate all items and check availability
     for (const item of items) {
@@ -110,7 +111,8 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       const actualItemId = itemId || sku; // Support both field names
 
       if (actualItemId === PUBLIC_ODD_HOUR_ITEM_CLIENT_ID) {
-        if (!quantity || quantity <= 0) {
+        const normalizedQty = Math.floor(Number(quantity));
+        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
           return ApiResponses.badRequest('Số lượng giờ lẻ không hợp lệ');
         }
 
@@ -142,7 +144,6 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
         );
 
         const normalizedPrice = deskHourlyRate;
-        const normalizedQty = Math.floor(quantity);
         const subtotal = normalizedPrice * normalizedQty;
 
         orderItems.push({
@@ -154,6 +155,7 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
         });
 
         totalAmount += subtotal;
+        serviceExtensionHours += normalizedQty;
         continue;
       }
 
@@ -161,7 +163,8 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
         return ApiResponses.badRequest(`Invalid item ID: ${actualItemId}`);
       }
 
-      if (!quantity || quantity <= 0) {
+      const normalizedQty = Math.floor(Number(quantity));
+      if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
         return ApiResponses.badRequest(`Invalid quantity for item: ${actualItemId}`);
       }
 
@@ -182,16 +185,36 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
 
       // Add to order items (no stock check — staff will verify when delivering)
       const normalizedPrice = normalizeVndAmount(inventoryItem.price);
-      const subtotal = normalizedPrice * quantity;
+      const subtotal = normalizedPrice * normalizedQty;
       orderItems.push({
         itemId: inventoryItem._id,
         name: inventoryItem.name,
         price: normalizedPrice,
-        quantity,
+        quantity: normalizedQty,
         subtotal
       });
 
       totalAmount += subtotal;
+
+      if (
+        inventoryItem.category === 'combo' &&
+        !inventoryItem.pricePerPerson &&
+        Number(inventoryItem.duration || 0) > 0
+      ) {
+        serviceExtensionHours += Number(inventoryItem.duration) * normalizedQty;
+      }
+    }
+
+    let serviceExtensionAppliedAt: Date | undefined;
+    if (serviceExtensionHours > 0) {
+      const nowUtc = new Date();
+      const currentEnd = new Date(booking.endTime);
+      const baseTime = currentEnd > nowUtc ? currentEnd : nowUtc;
+      booking.endTime = new Date(
+        baseTime.getTime() + serviceExtensionHours * 60 * 60 * 1000,
+      );
+      await booking.save();
+      serviceExtensionAppliedAt = new Date();
     }
 
     // Create order (shift stock will be deducted when staff marks as delivered)
@@ -199,7 +222,9 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       bookingId,
       items: orderItems,
       total: totalAmount,
-      notes
+      notes,
+      serviceExtensionHours,
+      serviceExtensionAppliedAt,
     });
 
     await order.save();
@@ -217,7 +242,15 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
     // Populate items for response
     await order.populate('items.itemId', 'name price imageUrl');
 
-    return ApiResponses.created(order, 'Order placed successfully');
+    return ApiResponses.created(
+      {
+        order,
+        booking: {
+          endTime: booking.endTime,
+        },
+      },
+      'Order placed successfully'
+    );
 
   } catch (error) {
     console.error('Place order error:', error);

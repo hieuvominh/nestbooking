@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
 
     const booking = await Booking.findById(bookingId)
       .populate('deskId', 'label location hourlyRate')
-      .populate('comboId', 'name pricePerPerson')
+      .populate('comboId', 'name pricePerPerson duration')
       .lean();
 
     if (!booking) {
@@ -132,7 +132,7 @@ export async function PATCH(request: NextRequest, { params }: PublicBookingParam
       return ApiResponses.badRequest('Check-in is not available yet');
     }
 
-    if (now > endTime) {
+    if (nowUtc > endTime) {
       return ApiResponses.badRequest('Booking has expired');
     }
 

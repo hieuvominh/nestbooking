@@ -81,6 +81,7 @@ interface Booking {
   };
   isComboBooking?: boolean;
   guestCount?: number;
+  comboQuantity?: number;
 }
 
 interface OrderItem {
@@ -127,6 +128,7 @@ interface InventoryItem {
   unit?: string;
   type?: "item" | "combo";
   duration?: number;
+  pricePerPerson?: boolean;
 }
 
 interface CartItem {
@@ -346,6 +348,26 @@ export default function BillingPage() {
     return 1;
   }, [booking, comboDetails]);
 
+  const effectiveComboQuantity = useMemo(() => {
+    if (!booking) return 1;
+    if (booking.comboQuantity && booking.comboQuantity >= 1) {
+      return booking.comboQuantity;
+    }
+
+    const combo = comboDetails || (booking.comboId as any);
+    if (
+      booking.isComboBooking &&
+      combo &&
+      !combo.pricePerPerson &&
+      Number(combo.duration || 0) > 0
+    ) {
+      const derived = Math.round(bookingDuration / Number(combo.duration || 1));
+      return derived >= 1 ? derived : 1;
+    }
+
+    return 1;
+  }, [booking, comboDetails, bookingDuration]);
+
   const deskCost = useMemo(() => {
     if (!booking) return 0;
 
@@ -356,7 +378,9 @@ export default function BillingPage() {
       if (comboPrice != null) {
         const base = normalizeVndAmount(comboPrice);
         const isPerPerson = combo.pricePerPerson ?? false;
-        return isPerPerson ? base * effectiveGuestCount : base;
+        return isPerPerson
+          ? base * effectiveGuestCount
+          : base * effectiveComboQuantity;
       }
       return normalizeVndAmount(booking.totalAmount);
     }
@@ -365,7 +389,7 @@ export default function BillingPage() {
     return Math.ceil(
       bookingDuration * normalizeVndAmount(booking.deskId.hourlyRate),
     );
-  }, [booking, bookingDuration, effectiveGuestCount]);
+  }, [booking, bookingDuration, effectiveGuestCount, effectiveComboQuantity]);
 
   // Calculate total orders cost
   const ordersTotal = useMemo(() => {
@@ -497,27 +521,29 @@ export default function BillingPage() {
       });
 
       // build final list
-      const guestCount = effectiveGuestCount;
+      const comboMultiplier = combo?.pricePerPerson
+        ? effectiveGuestCount
+        : effectiveComboQuantity;
       const final = entries.map((e: any) => {
         if (e.name)
           return {
             name: e.name,
             price: e.price,
-            quantity: e.quantity * guestCount,
+            quantity: e.quantity * comboMultiplier,
           };
         if (e.id && fetchedById[e.id]) {
           const item = fetchedById[e.id];
           return {
             name: item.name || `Item ${String(item._id).slice(-6)}`,
             price: normalizeVndAmount(item.price ?? 0),
-            quantity: (Number(e.quantity ?? e.qty ?? 1) || 1) * guestCount,
+            quantity: (Number(e.quantity ?? e.qty ?? 1) || 1) * comboMultiplier,
           };
         }
         if (e.id)
           return {
             name: `Item ${String(e.id).slice(-6)}`,
             price: 0,
-            quantity: (Number(e.quantity ?? 1) || 1) * guestCount,
+            quantity: (Number(e.quantity ?? 1) || 1) * comboMultiplier,
           };
         if (e._raw && typeof e._raw === "object") {
           // try to stringify minimal info
@@ -530,10 +556,11 @@ export default function BillingPage() {
             name: asName,
             price: normalizeVndAmount(e._raw.price ?? 0),
             quantity:
-              (Number(e._raw.quantity ?? e._raw.qty ?? 1) || 1) * guestCount,
+              (Number(e._raw.quantity ?? e._raw.qty ?? 1) || 1) *
+              comboMultiplier,
           };
         }
-        return { name: "Unknown item", price: 0, quantity: guestCount };
+        return { name: "Unknown item", price: 0, quantity: comboMultiplier };
       });
 
       if (!cancelled) {
@@ -564,7 +591,9 @@ export default function BillingPage() {
     comboDetails,
     booking?.comboId,
     booking?.guestCount,
+    booking?.comboQuantity,
     effectiveGuestCount,
+    effectiveComboQuantity,
     apiCall,
   ]);
 
@@ -827,7 +856,9 @@ export default function BillingPage() {
           body: {
             code: promoCode.trim().toUpperCase(),
             subtotal: deskCost,
-            isComboBooking: Boolean(booking?.comboId || booking?.isComboBooking),
+            isComboBooking: Boolean(
+              booking?.comboId || booking?.isComboBooking,
+            ),
             comboId: booking?.comboId?._id,
             guestCount: effectiveGuestCount,
             comboPricePerPerson: Boolean(
@@ -1202,7 +1233,10 @@ export default function BillingPage() {
                           <p className="text-sm text-gray-600">
                             Gói combo: {combo.name}
                           </p>
-                          <p className="text-xs text-gray-500">Giá cố định</p>
+                          <p className="text-xs text-gray-500">
+                            {effectiveComboQuantity} gói ×{" "}
+                            {formatCurrency(normalizeVndAmount(combo.price))}
+                          </p>
                         </>
                       );
                     }
@@ -1453,7 +1487,7 @@ export default function BillingPage() {
                                     {(comboDetails && comboDetails.duration) ||
                                       (booking.comboId as any)?.duration ||
                                       0}{" "}
-                                    giờ —{" "}
+                                    giờ / gói — {effectiveComboQuantity} gói ×{" "}
                                     {formatCurrency(
                                       (comboDetails && comboDetails.price) ||
                                         (booking.comboId as any)?.price ||
@@ -1475,9 +1509,11 @@ export default function BillingPage() {
                             <p className="font-semibold">
                               {booking.comboId || booking.isComboBooking
                                 ? formatCurrency(
-                                    (comboDetails && comboDetails.price) ||
-                                      (booking.comboId as any)?.price ||
-                                      0,
+                                    Number(
+                                      ((comboDetails && comboDetails.price) ||
+                                        (booking.comboId as any)?.price ||
+                                        0) * effectiveComboQuantity,
+                                    ),
                                   )
                                 : formatCurrency(deskCost)}
                             </p>
@@ -1523,10 +1559,11 @@ export default function BillingPage() {
                       {(booking.comboId || booking.isComboBooking) &&
                       idx === 0 ? (
                         (() => {
-                          const comboPrice =
-                            (comboDetails && comboDetails.price) ||
-                            (booking.comboId as any)?.price ||
-                            0;
+                          const comboPrice = Number(
+                            ((comboDetails && comboDetails.price) ||
+                              (booking.comboId as any)?.price ||
+                              0) * effectiveComboQuantity,
+                          );
                           return (
                             <div className="space-y-1">
                               <div className="flex justify-between items-center font-semibold">
@@ -1651,7 +1688,9 @@ export default function BillingPage() {
                   <Button
                     variant="outline"
                     onClick={handleApplyPromo}
-                    disabled={!promoCode || !canAdjustDiscounts || isValidatingVoucher}
+                    disabled={
+                      !promoCode || !canAdjustDiscounts || isValidatingVoucher
+                    }
                   >
                     {isValidatingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
                   </Button>
@@ -1715,10 +1754,10 @@ export default function BillingPage() {
                         "Gói combo"}
                     </p>
                     <p className="text-xs text-gray-600">
-                      {(comboDetails && comboDetails.duration) ||
+                      {((comboDetails && comboDetails.duration) ||
                         booking.comboId?.duration ||
-                        0}{" "}
-                      giờ
+                        0) * effectiveComboQuantity}{" "}
+                      giờ tổng
                     </p>
                   </div>
                 )}
@@ -1809,7 +1848,8 @@ export default function BillingPage() {
                 {calculatedDiscount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>
-                      Giảm giá {appliedVoucher?.code ? `(${appliedVoucher.code})` : ""}
+                      Giảm giá{" "}
+                      {appliedVoucher?.code ? `(${appliedVoucher.code})` : ""}
                     </span>
                     <span>-{formatCurrency(calculatedDiscount)}</span>
                   </div>
@@ -1894,6 +1934,7 @@ export default function BillingPage() {
                               pricePerPerson:
                                 comboForPrint.pricePerPerson ?? false,
                               guestCount: effectiveGuestCount,
+                              comboQuantity: effectiveComboQuantity,
                             }
                           : undefined;
 
@@ -1919,11 +1960,14 @@ export default function BillingPage() {
                       // Line for desk/combo
                       if (comboPackageProp) {
                         const guests = comboPackageProp.guestCount ?? 1;
+                        const comboQty = comboPackageProp.comboQuantity ?? 1;
                         const isPerPerson =
                           comboPackageProp.pricePerPerson ?? false;
                         btItems.push({
                           name: `Goi: ${comboPackageProp.name}`,
-                          qty: isPerPerson ? guests.toString() : "1",
+                          qty: isPerPerson
+                            ? guests.toString()
+                            : comboQty.toString(),
                           price: fmtVnd(comboPackageProp.price),
                         });
                       } else {

@@ -104,31 +104,59 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
 
           // Extend booking end time for duration-based public service combos
           // (e.g., combo public room 4h, odd-hour item 1h)
-          const extensionHours = currentOrder.items.reduce((sum: number, item: any) => {
-            const inv: any = inventoryMap.get(String(item.itemId || ''));
-            if (!inv) return sum;
+          const extensionAlreadyApplied = Boolean(currentOrder.serviceExtensionAppliedAt);
+          const extensionHours = extensionAlreadyApplied
+            ? 0
+            : currentOrder.items.reduce((sum: number, item: any) => {
+                const inv: any = inventoryMap.get(String(item.itemId || ''));
+                if (!inv) return sum;
 
-            const duration = Number(inv.duration || 0);
-            const quantity = Number(item.quantity || 0);
-            const isDurationServiceCombo =
-              inv.category === 'combo' &&
-              duration > 0 &&
-              !inv.pricePerPerson;
+                const duration = Number(inv.duration || 0);
+                const quantity = Number(item.quantity || 0);
+                const isDurationServiceCombo =
+                  inv.category === 'combo' &&
+                  duration > 0 &&
+                  !inv.pricePerPerson;
 
-            if (!isDurationServiceCombo || quantity <= 0) return sum;
+                if (!isDurationServiceCombo || quantity <= 0) return sum;
 
-            return sum + duration * quantity;
-          }, 0);
+                return sum + duration * quantity;
+              }, 0);
 
           if (extensionHours > 0) {
-            const booking = await Booking.findById(currentOrder.bookingId);
-            if (booking && booking.status !== 'cancelled' && booking.status !== 'completed') {
-              // Convert getNowInVietnam() to UTC for correct comparison with DB endTime
-              const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
-              const currentEnd = new Date(booking.endTime);
-              const baseTime = currentEnd > nowUtc ? currentEnd : nowUtc;
-              booking.endTime = new Date(baseTime.getTime() + extensionHours * 60 * 60 * 1000);
-              await booking.save();
+            // Idempotency guard: only one request may mark this order's extension as applied.
+            // This prevents duplicate endTime increments when users click "Hoàn thành" multiple times
+            // or concurrent requests race.
+            const appliedAt = new Date();
+            const markExtensionApplied = await Order.updateOne(
+              {
+                _id: currentOrder._id,
+                $or: [
+                  { serviceExtensionAppliedAt: { $exists: false } },
+                  { serviceExtensionAppliedAt: null },
+                ],
+              },
+              {
+                $set: {
+                  serviceExtensionHours: extensionHours,
+                  serviceExtensionAppliedAt: appliedAt,
+                },
+              }
+            );
+
+            if (markExtensionApplied.modifiedCount > 0) {
+              const booking = await Booking.findById(currentOrder.bookingId);
+              if (booking && booking.status !== 'cancelled' && booking.status !== 'completed') {
+                // Convert getNowInVietnam() to UTC for correct comparison with DB endTime
+                const nowUtc = new Date(getNowInVietnam().getTime() - 7 * 60 * 60 * 1000);
+                const currentEnd = new Date(booking.endTime);
+                const baseTime = currentEnd > nowUtc ? currentEnd : nowUtc;
+                booking.endTime = new Date(baseTime.getTime() + extensionHours * 60 * 60 * 1000);
+                await booking.save();
+              }
+
+              updateData.serviceExtensionHours = extensionHours;
+              updateData.serviceExtensionAppliedAt = appliedAt;
             }
           }
         }
@@ -141,6 +169,10 @@ async function updateOrder(request: AuthenticatedRequest, { params }: { params: 
     // Block cancelling a delivered order (stock already deducted)
     if (status === 'cancelled' && previousStatus === 'delivered') {
       return ApiResponses.badRequest('Không thể hủy đơn đã giao');
+    }
+
+    if (status === 'cancelled' && (currentOrder.serviceExtensionAppliedAt || Number(currentOrder.serviceExtensionHours || 0) > 0)) {
+      return ApiResponses.badRequest('Không thể hủy đơn đã áp dụng thêm giờ');
     }
 
     const order = await Order.findByIdAndUpdate(

@@ -51,6 +51,10 @@ export async function PATCH(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.badRequest('Only pending orders can be cancelled');
     }
 
+    if (order.serviceExtensionAppliedAt || Number(order.serviceExtensionHours || 0) > 0) {
+      return ApiResponses.badRequest('Không thể hủy đơn đã áp dụng thêm giờ');
+    }
+
     order.status = 'cancelled';
     await order.save();
 

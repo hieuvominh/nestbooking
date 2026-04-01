@@ -27,6 +27,7 @@ interface PrintBillProps {
       price: number;
       pricePerPerson?: boolean;
       guestCount?: number;
+      comboQuantity?: number;
     };
     items?: Array<{
       name: string;
@@ -114,7 +115,10 @@ export function PrintBill({
     if (booking.comboPackage) {
       const base = booking.comboPackage.price;
       const guests = booking.comboPackage.guestCount ?? 1;
-      return booking.comboPackage.pricePerPerson ? base * guests : base;
+      const comboQty = booking.comboPackage.comboQuantity ?? 1;
+      return booking.comboPackage.pricePerPerson
+        ? base * guests
+        : base * comboQty;
     }
     const duration = parseFloat(calculateDuration());
     return duration * deskHourlyRate;
@@ -173,10 +177,11 @@ export function PrintBill({
 
   if (booking.comboPackage) {
     const guests = booking.comboPackage.guestCount ?? 1;
+    const comboQty = booking.comboPackage.comboQuantity ?? 1;
     const isPerPerson = booking.comboPackage.pricePerPerson ?? false;
     receiptItems.push({
       name: `Gói: ${booking.comboPackage.name}`,
-      quantity: isPerPerson ? guests.toString() : "1",
+      quantity: isPerPerson ? guests.toString() : comboQty.toString(),
       unitPrice: formatVnd(booking.comboPackage.price),
       total: formatVnd(deskCost),
     });

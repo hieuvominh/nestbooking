@@ -124,6 +124,16 @@ export default function CreateBookingPage() {
   const router = useRouter();
   const { apiCall } = useApi();
 
+  const parsePositiveIntegerInput = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return null;
+
+    return Math.max(1, Math.floor(parsed));
+  };
+
   // Current shift params (computed once on mount)
   const shiftDateKey = getShiftDateKey();
   const shiftCode: "S1" = "S1";
@@ -170,7 +180,8 @@ export default function CreateBookingPage() {
   );
 
   // Guest count for per-person combos
-  const [guestCount, setGuestCount] = useState<number>(1);
+  const [guestCountInput, setGuestCountInput] = useState<string>("");
+  const [comboQuantityInput, setComboQuantityInput] = useState<string>("");
 
   // Duration in hours for manual bookings (used when no combo selected)
   const [durationHours, setDurationHours] = useState<number>(1);
@@ -205,6 +216,14 @@ export default function CreateBookingPage() {
   const [voucherApplied, setVoucherApplied] =
     useState<VoucherValidationResult | null>(null);
   const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
+  const guestCount = useMemo(
+    () => parsePositiveIntegerInput(guestCountInput),
+    [guestCountInput],
+  );
+  const comboQuantity = useMemo(
+    () => parsePositiveIntegerInput(comboQuantityInput),
+    [comboQuantityInput],
+  );
 
   // Auto-update end time when combo is selected
   useEffect(() => {
@@ -214,9 +233,19 @@ export default function CreateBookingPage() {
       const [year, month, day] = datePart.split("-").map(Number);
       const [hours, minutes] = timePart.split(":").map(Number);
 
+      const durationMultiplier = selectedCombo.pricePerPerson
+        ? 1
+        : (comboQuantity ?? 0);
+
+      if (!selectedCombo.pricePerPerson && durationMultiplier <= 0) {
+        setFormData((prev) => ({ ...prev, endTime: "" }));
+        return;
+      }
+
       const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(
-        startDate.getTime() + selectedCombo.duration * 60 * 60 * 1000,
+        startDate.getTime() +
+          selectedCombo.duration * durationMultiplier * 60 * 60 * 1000,
       );
 
       const endYear = endDate.getFullYear();
@@ -250,7 +279,7 @@ export default function CreateBookingPage() {
 
       setFormData((prev) => ({ ...prev, endTime: endTimeString }));
     }
-  }, [selectedCombo, formData.startTime, durationHours]);
+  }, [selectedCombo, formData.startTime, durationHours, comboQuantity]);
 
   // Get selected desk details
   const selectedDesk = useMemo(() => {
@@ -274,14 +303,16 @@ export default function CreateBookingPage() {
     if (selectedCombo) {
       // Combo selected: use combo price, multiply by guestCount if pricePerPerson
       const base = normalizeVndAmount(selectedCombo.price);
-      return selectedCombo.pricePerPerson ? base * guestCount : base;
+      return selectedCombo.pricePerPerson
+        ? base * (guestCount ?? 0)
+        : base * (comboQuantity ?? 0);
     }
     // Regular booking: calculate based on desk hourly rate
     if (!selectedDesk || bookingDuration <= 0) return 0;
     return Math.ceil(
       bookingDuration * normalizeVndAmount(selectedDesk.hourlyRate),
     );
-  }, [selectedCombo, selectedDesk, bookingDuration, guestCount]);
+  }, [selectedCombo, selectedDesk, bookingDuration, guestCount, comboQuantity]);
 
   // Calculate inventory/cart total (add-ons)
   const inventoryTotal = useMemo(() => {
@@ -319,7 +350,9 @@ export default function CreateBookingPage() {
         id: `combo-${selectedCombo._id}`,
         name: `Gói: ${selectedCombo.name}`,
         price: selectedCombo.price,
-        quantity: 1,
+        quantity: selectedCombo.pricePerPerson
+          ? (guestCount ?? 0)
+          : (comboQuantity ?? 0),
         isCombo: true,
       }
     : selectedDesk
@@ -337,6 +370,8 @@ export default function CreateBookingPage() {
     setFormData((prev) => ({ ...prev, deskId: "", endTime: "" }));
     setDurationHours(1);
     setSelectedCombo(null);
+    setGuestCountInput("");
+    setComboQuantityInput("");
     setRevealTimeCost(false);
     setVoucherApplied(null);
     toast.info("Đã xóa chọn bàn/gói");
@@ -384,6 +419,8 @@ export default function CreateBookingPage() {
   // Handle combo selection
   const selectCombo = (combo: InventoryItem) => {
     setSelectedCombo(combo);
+    setGuestCountInput("");
+    setComboQuantityInput("");
     toast.success(
       `${combo.name} đã được chọn! Thời lượng: ${combo.duration} giờ`,
     );
@@ -392,7 +429,8 @@ export default function CreateBookingPage() {
   // Clear combo selection
   const clearCombo = () => {
     setSelectedCombo(null);
-    setGuestCount(1);
+    setGuestCountInput("");
+    setComboQuantityInput("");
     // Reset combo and compute endTime from durationHours if startTime exists
     if (formData.startTime && durationHours > 0) {
       const [datePart, timePart] = formData.startTime.split("T");
@@ -435,6 +473,14 @@ export default function CreateBookingPage() {
       toast.error("Vui lòng chọn bàn trước khi áp voucher");
       return;
     }
+    if (selectedCombo?.pricePerPerson && !guestCount) {
+      toast.error("Vui lòng nhập số khách hợp lệ");
+      return;
+    }
+    if (selectedCombo && !selectedCombo.pricePerPerson && !comboQuantity) {
+      toast.error("Vui lòng nhập số combo hợp lệ");
+      return;
+    }
 
     setIsValidatingVoucher(true);
     try {
@@ -447,7 +493,7 @@ export default function CreateBookingPage() {
             subtotal: bookingTotal,
             isComboBooking: Boolean(selectedCombo),
             comboId: selectedCombo?._id,
-            guestCount,
+            guestCount: guestCount ?? undefined,
             comboPricePerPerson: Boolean(selectedCombo?.pricePerPerson),
           },
         },
@@ -469,7 +515,13 @@ export default function CreateBookingPage() {
   useEffect(() => {
     // Booking amount basis changed -> require re-validate voucher to avoid stale quote
     setVoucherApplied(null);
-  }, [bookingTotal, selectedCombo?._id, selectedCombo?.pricePerPerson, guestCount]);
+  }, [
+    bookingTotal,
+    selectedCombo?._id,
+    selectedCombo?.pricePerPerson,
+    guestCount,
+    comboQuantity,
+  ]);
 
   // Automatically reveal time-based pricing when a desk + duration is selected
   // or when a combo is selected. Hide it otherwise.
@@ -569,6 +621,14 @@ export default function CreateBookingPage() {
       toast.error("Vui lòng chọn bàn");
       return false;
     }
+    if (selectedCombo?.pricePerPerson && !guestCount) {
+      toast.error("Vui lòng nhập số khách hợp lệ");
+      return false;
+    }
+    if (selectedCombo && !selectedCombo.pricePerPerson && !comboQuantity) {
+      toast.error("Vui lòng nhập số combo hợp lệ");
+      return false;
+    }
     return true;
   };
 
@@ -588,8 +648,12 @@ export default function CreateBookingPage() {
 
       let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
       if (selectedCombo && selectedCombo.duration) {
+        const durationMultiplier = selectedCombo.pricePerPerson
+          ? 1
+          : (comboQuantity ?? 0);
         endDate = new Date(
-          now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
+          now.getTime() +
+            selectedCombo.duration * durationMultiplier * 60 * 60 * 1000,
         );
       }
       const endIso = formatDateTimeLocal(endDate);
@@ -638,6 +702,9 @@ export default function CreateBookingPage() {
               comboId: selectedCombo._id,
               isComboBooking: true,
               ...(selectedCombo.pricePerPerson ? { guestCount } : {}),
+              ...(!selectedCombo.pricePerPerson && comboQuantity
+                ? { comboQuantity }
+                : {}),
             }
           : {}),
       };
@@ -920,16 +987,36 @@ export default function CreateBookingPage() {
                             </Label>
                             <Input
                               id="guestCount"
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={guestCount}
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="off"
+                              placeholder="Nhập số"
+                              value={guestCountInput}
                               onChange={(e) => {
-                                const v = Math.max(
-                                  1,
-                                  Math.floor(Number(e.target.value) || 1),
+                                const nextValue = e.target.value;
+                                if (nextValue === "") {
+                                  setGuestCountInput("");
+                                  return;
+                                }
+
+                                if (!/^\d+$/.test(nextValue)) {
+                                  return;
+                                }
+
+                                const parsed =
+                                  parsePositiveIntegerInput(nextValue);
+                                setGuestCountInput(
+                                  parsed ? String(parsed) : "",
                                 );
-                                setGuestCount(v);
+                              }}
+                              onBlur={() => {
+                                if (!guestCountInput.trim()) return;
+                                const parsed =
+                                  parsePositiveIntegerInput(guestCountInput);
+                                setGuestCountInput(
+                                  parsed ? String(parsed) : "",
+                                );
                               }}
                               className="w-24"
                             />
@@ -938,10 +1025,76 @@ export default function CreateBookingPage() {
                               <strong>
                                 {formatCurrency(
                                   normalizeVndAmount(selectedCombo.price) *
-                                    guestCount,
+                                    (guestCount ?? 0),
                                 )}
                               </strong>
                             </span>
+                          </div>
+                        )}
+                        {!selectedCombo.pricePerPerson && (
+                          <div className="mt-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Label
+                                htmlFor="comboQuantity"
+                                className="text-sm whitespace-nowrap"
+                              >
+                                Số combo *
+                              </Label>
+                              <Input
+                                id="comboQuantity"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoComplete="off"
+                                placeholder="Nhập số"
+                                value={comboQuantityInput}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value;
+                                  if (nextValue === "") {
+                                    setComboQuantityInput("");
+                                    return;
+                                  }
+
+                                  if (!/^\d+$/.test(nextValue)) {
+                                    return;
+                                  }
+
+                                  const parsed =
+                                    parsePositiveIntegerInput(nextValue);
+                                  setComboQuantityInput(
+                                    parsed ? String(parsed) : "",
+                                  );
+                                }}
+                                onBlur={() => {
+                                  if (!comboQuantityInput.trim()) return;
+                                  const parsed =
+                                    parsePositiveIntegerInput(
+                                      comboQuantityInput,
+                                    );
+                                  setComboQuantityInput(
+                                    parsed ? String(parsed) : "",
+                                  );
+                                }}
+                                className="w-24"
+                              />
+                              <span className="text-sm text-gray-600">
+                                → Tổng:{" "}
+                                <strong>
+                                  {formatCurrency(
+                                    normalizeVndAmount(selectedCombo.price) *
+                                      (comboQuantity ?? 0),
+                                  )}
+                                </strong>
+                              </span>
+                            </div>
+                            <p className="text-sm text-blue-700">
+                              Tổng thời gian:{" "}
+                              <strong>
+                                {(selectedCombo.duration || 0) *
+                                  (comboQuantity ?? 0)}{" "}
+                                giờ
+                              </strong>
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1138,7 +1291,10 @@ export default function CreateBookingPage() {
                             {combo.duration && (
                               <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
                                 <Clock className="h-3 w-3" />
-                                <span>{combo.duration} giờ bao gồm</span>
+                                <span>
+                                  {combo.duration} giờ
+                                  {combo.pricePerPerson ? " / khách" : " / gói"}
+                                </span>
                               </div>
                             )}
 
@@ -1439,61 +1595,67 @@ export default function CreateBookingPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <Label className="text-sm flex items-center gap-2">
-                      <Ticket className="h-4 w-4" />
-                      Voucher
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Nhập mã voucher"
-                        value={voucherCode}
-                        onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                        className="uppercase"
-                      />
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label className="text-sm flex items-center gap-2">
+                    <Ticket className="h-4 w-4" />
+                    Voucher
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nhập mã voucher"
+                      value={voucherCode}
+                      onChange={(e) =>
+                        setVoucherCode(e.target.value.toUpperCase())
+                      }
+                      className="uppercase"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleValidateVoucher}
+                      disabled={isValidatingVoucher || !voucherCode.trim()}
+                    >
+                      {isValidatingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
+                    </Button>
+                  </div>
+
+                  {voucherApplied && (
+                    <div className="rounded-md bg-green-50 border border-green-200 p-2 text-sm">
+                      <p className="font-medium text-green-700">
+                        Đã áp dụng: {voucherApplied.voucher.code}
+                      </p>
+                      <p className="text-green-700">
+                        Giảm: {formatCurrency(voucherDiscount)}
+                      </p>
                       <Button
                         type="button"
-                        variant="outline"
-                        onClick={handleValidateVoucher}
-                        disabled={isValidatingVoucher || !voucherCode.trim()}
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1 h-7 px-2 text-red-600"
+                        onClick={clearVoucher}
                       >
-                        {isValidatingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
+                        Bỏ voucher
                       </Button>
                     </div>
-
-                    {voucherApplied && (
-                      <div className="rounded-md bg-green-50 border border-green-200 p-2 text-sm">
-                        <p className="font-medium text-green-700">
-                          Đã áp dụng: {voucherApplied.voucher.code}
-                        </p>
-                        <p className="text-green-700">
-                          Giảm: {formatCurrency(voucherDiscount)}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="mt-1 h-7 px-2 text-red-600"
-                          onClick={clearVoucher}
-                        >
-                          Bỏ voucher
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                  )}
+                </div>
 
                 {/* Breakdown */}
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Thuê Bàn</span>
-                      <span className="font-medium">{formatCurrency(deskCost)}</span>
+                    <span className="font-medium">
+                      {formatCurrency(deskCost)}
+                    </span>
                   </div>
-                    {voucherDiscount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600">
-                        <span>Voucher</span>
-                        <span className="font-medium">-{formatCurrency(voucherDiscount)}</span>
-                      </div>
-                    )}
+                  {voucherDiscount > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Voucher</span>
+                      <span className="font-medium">
+                        -{formatCurrency(voucherDiscount)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Món ({cart.length})</span>
                     <span className="font-medium">
