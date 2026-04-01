@@ -1,6 +1,39 @@
 import { ShiftInventory } from '@/models';
 import { getShiftCode, getShiftDateKey, isWithinShift } from '@/lib/shift';
-import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
+
+export type LegacyShiftCode = 'S1' | 'S2' | 'S3';
+
+const SHIFT_PRIORITY: LegacyShiftCode[] = ['S1', 'S2', 'S3'];
+
+// Single-shift mode compatibility: if historical data for the selected date was
+// already written under legacy shift codes, keep using that unresolved shift
+// until data is closed or migrated.
+export async function resolveEffectiveShiftCode(
+  dateKey: string,
+): Promise<LegacyShiftCode> {
+  const unresolvedCodes = (await ShiftInventory.distinct('shiftCode', {
+    dateKey,
+    reconciledAt: { $exists: false },
+  })) as LegacyShiftCode[];
+
+  for (const code of SHIFT_PRIORITY) {
+    if (unresolvedCodes.includes(code)) {
+      return code;
+    }
+  }
+
+  const existingCodes = (await ShiftInventory.distinct('shiftCode', {
+    dateKey,
+  })) as LegacyShiftCode[];
+
+  for (const code of SHIFT_PRIORITY) {
+    if (existingCodes.includes(code)) {
+      return code;
+    }
+  }
+
+  return 'S1';
+}
 
 export interface ShiftSaleItem {
   itemId: string;

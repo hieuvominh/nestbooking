@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { ShiftInventory } from '@/models';
 import { ApiResponses, requireRole } from '@/lib/api-middleware';
 import { getShiftDateKey } from '@/lib/shift';
-import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
+import { resolveEffectiveShiftCode } from '@/lib/shift-stock';
 
 // GET /api/shift-inventory?dateKey=YYYY-MM-DD&shiftCode=S1
 async function getShiftInventory(request: NextRequest) {

@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { InventoryItem, ShiftInventory } from '@/models';
 import { ApiResponses, requireRole } from '@/lib/api-middleware';
 import { getShiftDateKey } from '@/lib/shift';
-import { resolveEffectiveShiftCode } from '@/lib/shift-runtime';
+import { resolveEffectiveShiftCode } from '@/lib/shift-stock';
 
 interface AllocateItem {
   itemId: string;
