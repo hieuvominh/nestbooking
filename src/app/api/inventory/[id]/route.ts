@@ -65,6 +65,7 @@ async function updateInventoryItem(request: AuthenticatedRequest, { params }: In
     if (category) {
       item.type = category === 'combo' ? 'combo' : 'item';
     }
+
     if (includedItems !== undefined) {
       // only accept includedItems for combo
       if (item.type === 'combo' || category === 'combo') {

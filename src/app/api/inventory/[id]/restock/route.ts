@@ -23,8 +23,8 @@ async function restockInventoryItem(request: AuthenticatedRequest, context?: Res
     if (!quantity || quantity <= 0) {
       return ApiResponses.badRequest('Quantity must be greater than 0');
     }
-    if (!totalCost || totalCost <= 0) {
-      return ApiResponses.badRequest('Total cost must be greater than 0');
+    if (typeof totalCost !== 'number' || Number.isNaN(totalCost) || totalCost < 0) {
+      return ApiResponses.badRequest('Total cost must be greater than or equal to 0');
     }
 
     const item = await InventoryItem.findById(id);
