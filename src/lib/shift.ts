@@ -1,4 +1,4 @@
-import { toVietnamTime, getNowInVietnam, getVietnamDateString } from "@/lib/vietnam-time";
+import { toVietnamTime, getVietnamDateString } from "@/lib/vietnam-time";
 
 export type ShiftCode = "S1" | "S2" | "S3";
 
@@ -31,9 +31,9 @@ export function isWithinShift(
   shiftCode: ShiftCode,
   date: Date = new Date()
 ): boolean {
-  const local = toBangkokDate(date);
+  const local = toVietnamTime(date);
   const hour = local.getHours();
   const shift = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode);
   if (!shift) return false;
-  return hour >= sVietnamTimHour && hour < shift.endHour;
+  return hour >= shift.startHour && hour < shift.endHour;
 }
