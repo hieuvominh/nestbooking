@@ -31,6 +31,7 @@ interface Booking {
   endTime: string;
   status: "confirmed" | "checked-in" | "completed" | "cancelled";
   isMeetingRoomBooking?: boolean;
+  isSharedComboBooking?: boolean;
   checkInTime?: string;
   signature?: string;
 }
@@ -449,9 +450,10 @@ export default function PublicBookingPage() {
   };
 
   const isMeetingRoomBooking = Boolean(booking?.isMeetingRoomBooking);
+  const isSharedComboBooking = Boolean(booking?.isSharedComboBooking);
 
   const oddHourItem: InventoryItem | null =
-    !isMeetingRoomBooking && booking?.desk?.hourlyRate
+    !isMeetingRoomBooking && !isSharedComboBooking && booking?.desk?.hourlyRate
       ? {
           _id: ODD_HOUR_ITEM_ID,
           name: "Giờ lẻ",
@@ -465,7 +467,7 @@ export default function PublicBookingPage() {
         }
       : null;
 
-  const comboItems = isMeetingRoomBooking
+  const comboItems = isMeetingRoomBooking || isSharedComboBooking
     ? []
     : [
         ...inventory.filter(
@@ -473,6 +475,12 @@ export default function PublicBookingPage() {
         ),
         ...(oddHourItem ? [oddHourItem] : []),
       ];
+
+  useEffect(() => {
+    if (!isSharedComboBooking) return;
+
+    setCart((prev) => prev.filter((item) => !item.isServiceExtension));
+  }, [isSharedComboBooking]);
 
   const regularItems = inventory.filter((item) => item.category !== "combo");
 
@@ -726,6 +734,12 @@ export default function PublicBookingPage() {
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {isSharedComboBooking && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Booking này đang dùng chung một bàn nên trang khách chỉ gọi món lẻ, không gọi thêm giờ hoặc combo.
                 </div>
               )}
 

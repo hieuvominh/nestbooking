@@ -40,6 +40,49 @@ export interface ShiftSaleItem {
   quantity: number;
 }
 
+export async function validateShiftSale(items: ShiftSaleItem[]) {
+  const dateKey = getShiftDateKey();
+  const resolvedShift = await resolveEffectiveShiftCode(dateKey);
+
+  for (const item of items) {
+    const qty = Number(item.quantity || 0);
+    if (!item.itemId || qty <= 0) continue;
+
+    let existing = await ShiftInventory.findOne({
+      dateKey,
+      shiftCode: resolvedShift,
+      itemId: item.itemId,
+      reconciledAt: { $exists: false },
+    });
+    if (!existing) {
+      const anyRecord = await ShiftInventory.findOne({
+        dateKey,
+        shiftCode: resolvedShift,
+        itemId: item.itemId,
+      }).lean();
+      if (anyRecord?.reconciledAt) {
+        if (isWithinShift('S1')) {
+          existing = await ShiftInventory.findOne({
+            dateKey,
+            shiftCode: resolvedShift,
+            itemId: item.itemId,
+          });
+        } else {
+          throw new Error('Ca đã kết thúc, không thể bán');
+        }
+      } else {
+        throw new Error('Chưa cấp hàng cho ca');
+      }
+    }
+
+    const remaining =
+      existing.openingQty + existing.receivedQty - existing.soldQty;
+    if (remaining < qty) {
+      throw new Error(`Không đủ hàng trong ca (còn ${remaining})`);
+    }
+  }
+}
+
 export async function applyShiftSale(items: ShiftSaleItem[]) {
   const dateKey = getShiftDateKey();
   const resolvedShift = await resolveEffectiveShiftCode(dateKey);

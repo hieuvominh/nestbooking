@@ -67,6 +67,7 @@ export async function GET(request: NextRequest, { params }: PublicBookingParams)
       checkInTime: bookingAny.checkedInAt,
       notes: bookingAny.notes,
       isMeetingRoomBooking,
+      isSharedComboBooking: Boolean(bookingAny.isSharedComboBooking),
     };
 
     return ApiResponses.success(publicBookingData);

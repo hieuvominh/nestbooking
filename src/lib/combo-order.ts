@@ -1,5 +1,5 @@
 import { InventoryItem, Order } from '@/models';
-import { applyShiftSale } from '@/lib/shift-stock';
+import { applyShiftSale, validateShiftSale } from '@/lib/shift-stock';
 
 export interface EnsureComboOrderParams {
   bookingId: string;
@@ -8,21 +8,11 @@ export interface EnsureComboOrderParams {
   comboQuantity?: number;
 }
 
-export async function ensureComboOrderForPaidBooking({
-  bookingId,
+async function buildComboOrderItems({
   comboId,
   guestCount = 1,
   comboQuantity = 1,
-}: EnsureComboOrderParams) {
-  if (!bookingId || !comboId) return null;
-
-  // Avoid duplicates
-  const existing = await Order.findOne({
-    bookingId,
-    isComboOrder: true
-  });
-  if (existing) return existing;
-
+}: Omit<EnsureComboOrderParams, 'bookingId'>) {
   const combo = await InventoryItem.findById(comboId).lean();
   if (!combo) {
     throw new Error('Combo not found');
@@ -40,7 +30,7 @@ export async function ensureComboOrderForPaidBooking({
     : [];
 
   if (included.length === 0) {
-    return null;
+    return { combo, quantityMultiplier, orderItems: [] };
   }
 
   const componentIds = included.map((it: any) => String(it.item));
@@ -63,6 +53,59 @@ export async function ensureComboOrderForPaidBooking({
       subtotal: 0
     };
   });
+
+  return { combo, quantityMultiplier, orderItems };
+}
+
+export async function validateComboOrderForPaidBooking({
+  comboId,
+  guestCount = 1,
+  comboQuantity = 1,
+}: Omit<EnsureComboOrderParams, 'bookingId'>) {
+  if (!comboId) return;
+
+  const { orderItems } = await buildComboOrderItems({
+    comboId,
+    guestCount,
+    comboQuantity,
+  });
+
+  if (orderItems.length === 0) {
+    return;
+  }
+
+  await validateShiftSale(
+    orderItems.map((it) => ({
+      itemId: String(it.itemId),
+      quantity: Number(it.quantity || 0),
+    }))
+  );
+}
+
+export async function ensureComboOrderForPaidBooking({
+  bookingId,
+  comboId,
+  guestCount = 1,
+  comboQuantity = 1,
+}: EnsureComboOrderParams) {
+  if (!bookingId || !comboId) return null;
+
+  // Avoid duplicates
+  const existing = await Order.findOne({
+    bookingId,
+    isComboOrder: true
+  });
+  if (existing) return existing;
+
+  const { combo, quantityMultiplier, orderItems } = await buildComboOrderItems({
+    comboId,
+    guestCount,
+    comboQuantity,
+  });
+
+  if (orderItems.length === 0) {
+    return null;
+  }
 
   // Apply shift stock (same as normal order flow)
   await applyShiftSale(

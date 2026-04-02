@@ -100,6 +100,8 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       return ApiResponses.badRequest('Must be checked in to place orders');
     }
 
+    const isSharedComboBooking = Boolean((booking as any).isSharedComboBooking);
+
     // Process order items and check inventory
     const orderItems = [];
     let totalAmount = 0;
@@ -111,6 +113,10 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       const actualItemId = itemId || sku; // Support both field names
 
       if (actualItemId === PUBLIC_ODD_HOUR_ITEM_CLIENT_ID) {
+        if (isSharedComboBooking) {
+          return ApiResponses.badRequest('Booking dùng chung không hỗ trợ gọi thêm giờ hoặc combo trên trang khách');
+        }
+
         const normalizedQty = Math.floor(Number(quantity));
         if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
           return ApiResponses.badRequest('Số lượng giờ lẻ không hợp lệ');
@@ -181,6 +187,10 @@ export async function POST(request: NextRequest, { params }: OrderParams) {
       // Public rule: meeting-room combo (pricePerPerson=true) is not supported in public ordering
       if (inventoryItem.category === 'combo' && inventoryItem.pricePerPerson) {
         return ApiResponses.badRequest(`Combo theo đầu người chưa hỗ trợ trên trang khách: ${inventoryItem.name}`);
+      }
+
+      if (isSharedComboBooking && inventoryItem.category === 'combo') {
+        return ApiResponses.badRequest('Booking dùng chung không hỗ trợ gọi thêm giờ hoặc combo trên trang khách');
       }
 
       // Add to order items (no stock check — staff will verify when delivering)

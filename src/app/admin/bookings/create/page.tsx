@@ -235,19 +235,14 @@ export default function CreateBookingPage() {
       const [year, month, day] = datePart.split("-").map(Number);
       const [hours, minutes] = timePart.split(":").map(Number);
 
-      const durationMultiplier = selectedCombo.pricePerPerson
-        ? 1
-        : (comboQuantity ?? 0);
-
-      if (!selectedCombo.pricePerPerson && durationMultiplier <= 0) {
+      if (!selectedCombo.pricePerPerson && (comboQuantity ?? 0) <= 0) {
         setFormData((prev) => ({ ...prev, endTime: "" }));
         return;
       }
 
       const startDate = new Date(year, month - 1, day, hours, minutes);
       const endDate = new Date(
-        startDate.getTime() +
-          selectedCombo.duration * durationMultiplier * 60 * 60 * 1000,
+        startDate.getTime() + selectedCombo.duration * 60 * 60 * 1000,
       );
 
       const endYear = endDate.getFullYear();
@@ -636,12 +631,8 @@ export default function CreateBookingPage() {
 
       let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
       if (selectedCombo && selectedCombo.duration) {
-        const durationMultiplier = selectedCombo.pricePerPerson
-          ? 1
-          : (comboQuantity ?? 0);
         endDate = new Date(
-          now.getTime() +
-            selectedCombo.duration * durationMultiplier * 60 * 60 * 1000,
+          now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
         );
       }
       const endIso = formatDateTimeLocal(endDate);
@@ -860,36 +851,6 @@ export default function CreateBookingPage() {
                 <CardDescription>Chọn bàn và thời lượng đặt</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="deskId">Chọn Bàn *</Label>
-                  <Select
-                    value={formData.deskId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, deskId: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn một bàn" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {desks
-                        ?.filter((desk) => desk.status === "available")
-                        .sort((a, b) =>
-                          a.label.localeCompare(b.label, undefined, {
-                            numeric: true,
-                            sensitivity: "base",
-                          }),
-                        )
-                        .map((desk) => (
-                          <SelectItem key={desk._id} value={desk._id}>
-                            {desk.label} - {desk.location} (
-                            {formatCurrency(desk.hourlyRate)}/giờ)
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <div className="space-y-3">
                   <div>
                     <Label>Chọn Gói Combo (tùy chọn)</Label>
@@ -1042,6 +1003,36 @@ export default function CreateBookingPage() {
                   </div>
                 </div>
 
+                <div>
+                  <Label htmlFor="deskId">Chọn Bàn *</Label>
+                  <Select
+                    value={formData.deskId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, deskId: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn một bàn" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {desks
+                        ?.filter((desk) => desk.status === "available")
+                        .sort((a, b) =>
+                          a.label.localeCompare(b.label, undefined, {
+                            numeric: true,
+                            sensitivity: "base",
+                          }),
+                        )
+                        .map((desk) => (
+                          <SelectItem key={desk._id} value={desk._id}>
+                            {desk.label} - {desk.location} (
+                            {formatCurrency(desk.hourlyRate)}/giờ)
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {!selectedCombo && selectedDesk && (
                   <div className="mb-3">
                     <Label htmlFor="durationHours">Số giờ *</Label>
@@ -1106,7 +1097,7 @@ export default function CreateBookingPage() {
                           <p className="text-sm">
                             <Clock className="inline h-4 w-4 mr-1" />
                             <span className="font-semibold">
-                              {selectedCombo.duration} giờ cố định
+                              {selectedCombo.duration} giờ / lượt
                             </span>
                           </p>
                           <p className="text-sm">
@@ -1235,12 +1226,12 @@ export default function CreateBookingPage() {
                               </span>
                             </div>
                             <p className="text-sm text-blue-700">
-                              Tổng thời gian:{" "}
-                              <strong>
-                                {(selectedCombo.duration || 0) *
-                                  (comboQuantity ?? 0)}{" "}
-                                giờ
-                              </strong>
+                              Thời gian sử dụng: <strong>{selectedCombo.duration || 0} giờ</strong>
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {(comboQuantity ?? 0) > 1
+                                ? `${comboQuantity} gói sẽ tính là ${comboQuantity} người dùng chung 1 bàn, không cộng dồn thời gian.`
+                                : "1 gói tương ứng 1 lượt trên cùng bàn."}
                             </p>
                           </div>
                         )}

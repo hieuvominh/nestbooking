@@ -35,6 +35,7 @@ export interface IBooking extends Document {
   // Combo support
   comboId?: mongoose.Types.ObjectId | any;
   isComboBooking?: boolean;
+  isSharedComboBooking?: boolean;
   guestCount?: number;
   comboQuantity?: number;
   createdAt: Date;
@@ -165,6 +166,10 @@ const BookingSchema = new Schema<IBooking>(
       required: false,
     },
     isComboBooking: {
+      type: Boolean,
+      default: false,
+    },
+    isSharedComboBooking: {
       type: Boolean,
       default: false,
     },

@@ -3,7 +3,7 @@ import { addMinutes } from 'date-fns';
 import connectDB from '@/lib/mongodb';
 import { Booking, Desk, Transaction, InventoryItem, Voucher } from '@/models';
 import { generatePublicBookingUrl } from '@/lib/jwt';
-import { ensureComboOrderForPaidBooking } from '@/lib/combo-order';
+import { ensureComboOrderForPaidBooking, validateComboOrderForPaidBooking } from '@/lib/combo-order';
 import { normalizeVndAmount } from '@/lib/currency';
 import { calculateVoucherDiscount } from '@/lib/voucher';
 import { getNowInVietnam } from '@/lib/vietnam-time';
@@ -240,12 +240,12 @@ async function createBooking(request: AuthenticatedRequest) {
 
     const comboGuests = typeof guestCount === 'number' && guestCount >= 1 ? Math.floor(guestCount) : 1;
     const comboQty = typeof comboQuantity === 'number' && comboQuantity >= 1 ? Math.floor(comboQuantity) : 1;
+    const isSharedComboBooking = Boolean(combo && !combo.pricePerPerson && comboQty > 1);
 
     let end = new Date(endTime);
     if (combo && Number(combo.duration || 0) > 0) {
-      const durationMultiplier = combo.pricePerPerson ? 1 : comboQty;
       end = new Date(
-        start.getTime() + Number(combo.duration) * durationMultiplier * 60 * 60 * 1000,
+        start.getTime() + Number(combo.duration) * 60 * 60 * 1000,
       );
     }
 
@@ -371,6 +371,19 @@ async function createBooking(request: AuthenticatedRequest) {
         ? "paid"
         : paymentStatus || "pending";
 
+    if (resolvedPaymentStatus === 'paid' && comboId) {
+      try {
+        await validateComboOrderForPaidBooking({
+          comboId: String(comboId),
+          guestCount: comboGuests,
+          comboQuantity: comboQty,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Combo processing failed';
+        return ApiResponses.badRequest(msg);
+      }
+    }
+
     // Create booking with provided or default values
     const bookingData: any = {
       deskId,
@@ -392,6 +405,7 @@ async function createBooking(request: AuthenticatedRequest) {
     if (comboId) {
       bookingData.comboId = comboId;
       bookingData.isComboBooking = true;
+      bookingData.isSharedComboBooking = isSharedComboBooking;
       if (combo?.pricePerPerson) {
         bookingData.guestCount = comboGuests;
       } else {
@@ -442,6 +456,7 @@ async function createBooking(request: AuthenticatedRequest) {
         const fallbackSetData: any = {
           comboId: bookingData.comboId,
           isComboBooking: true,
+          isSharedComboBooking: bookingData.isSharedComboBooking,
         };
         if (bookingData.guestCount) fallbackSetData.guestCount = bookingData.guestCount;
         if (bookingData.comboQuantity) fallbackSetData.comboQuantity = bookingData.comboQuantity;
