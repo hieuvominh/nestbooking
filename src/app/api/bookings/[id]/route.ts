@@ -361,6 +361,11 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
       updateData.completedAt = new Date(); // Store UTC timestamp
     }
 
+    // Auto-refund when status transitions to cancelled and booking was paid
+    if (status === 'cancelled' && booking.status !== 'cancelled' && booking.paymentStatus === 'paid') {
+      updateData.paymentStatus = 'refunded';
+    }
+
 
     // Update public token if times changed
     if (startTime || endTime) {
@@ -470,7 +475,7 @@ async function updateBooking(request: AuthenticatedRequest, { params }: BookingP
         referenceModel: 'Booking',
         type: 'expense',
         source: 'booking',
-        description: { $regex: '^Refund booking payment' },
+        description: { $regex: '^Hoàn tiền' },
       });
 
       if (!existingRefund) {

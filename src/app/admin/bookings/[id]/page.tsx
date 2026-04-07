@@ -80,9 +80,26 @@ interface InventoryItem {
   _id: string;
   name: string;
   category: string;
+  type?: string;
+  sku?: string;
   price: number;
   quantity: number;
   isActive: boolean;
+}
+
+interface ShiftInventoryEntry {
+  _id: string;
+  itemId: { _id: string; name: string; price: number; category: string };
+  openingQty: number;
+  receivedQty: number;
+  soldQty: number;
+  reconciledAt?: string;
+}
+
+interface ShiftInventoryResponse {
+  dateKey: string;
+  shiftCode: string;
+  items: ShiftInventoryEntry[];
 }
 
 interface Order {
@@ -166,6 +183,23 @@ export default function BookingDetailPage() {
 
   const { data: inventory, isLoading: inventoryLoading } =
     useApi<InventoryItem[]>("/api/inventory");
+
+  const { data: shiftInventoryData } =
+    useApi<ShiftInventoryResponse>("/api/shift-inventory");
+
+  // Map itemId -> remaining qty in shift inventory (openingQty + receivedQty - soldQty)
+  const shiftRemainingMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (shiftInventoryData?.items) {
+      for (const entry of shiftInventoryData.items) {
+        const id = entry.itemId?._id;
+        if (id) {
+          map.set(id, entry.openingQty + entry.receivedQty - entry.soldQty);
+        }
+      }
+    }
+    return map;
+  }, [shiftInventoryData]);
 
   const {
     data: ordersResponse,
@@ -298,9 +332,27 @@ export default function BookingDetailPage() {
       return;
     }
 
-    if (item.quantity < quantity) {
-      toast.error("Không đủ tồn kho");
-      return;
+    const isServiceLike =
+      item.category === "combo" ||
+      item.type === "combo" ||
+      item.sku === "ODD_HOUR_PUBLIC";
+
+    if (!isServiceLike) {
+      // Non-combo items must be tracked in shift inventory
+      const shiftRemaining = shiftRemainingMap.get(selectedItem);
+      if (shiftRemaining === undefined) {
+        toast.error("Món này chưa được cấp vào kho ca hôm nay");
+        return;
+      }
+      if (shiftRemaining < quantity) {
+        toast.error(`Không đủ hàng trong kho ca (còn ${shiftRemaining})`);
+        return;
+      }
+    } else {
+      if (item.quantity < quantity) {
+        toast.error("Không đủ tồn kho");
+        return;
+      }
     }
 
     // Check if item already in cart
@@ -803,13 +855,25 @@ export default function BookingDetailPage() {
                               <SelectValue placeholder="Chọn một món..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {inventory?.map((item) => (
-                                <SelectItem key={item._id} value={item._id}>
-                                  {item.name} - {formatCurrency(item.price)}{" "}
-                                  (Tồn kho: {item.quantity}){" "}
-                                  {!item.isActive && " (Ngừng hoạt động)"}
-                                </SelectItem>
-                              ))}
+                              {inventory?.map((item) => {
+                                const isServiceLike =
+                                  item.category === "combo" ||
+                                  item.type === "combo" ||
+                                  item.sku === "ODD_HOUR_PUBLIC";
+                                const shiftRemaining = shiftRemainingMap.get(item._id);
+                                const stockLabel = isServiceLike
+                                  ? `Tồn kho: ${item.quantity}`
+                                  : shiftRemaining !== undefined
+                                    ? `Tồn kho ca: ${shiftRemaining}`
+                                    : "Chưa cấp kho ca";
+                                return (
+                                  <SelectItem key={item._id} value={item._id}>
+                                    {item.name} - {formatCurrency(item.price)}{" "}
+                                    ({stockLabel}){" "}
+                                    {!item.isActive && " (Ngừng hoạt động)"}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </div>
