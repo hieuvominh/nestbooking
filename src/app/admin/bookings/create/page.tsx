@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-// Checkbox removed: we no longer offer "Đặt Trước" in create flow; redirect to billing instead
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -213,6 +213,7 @@ export default function CreateBookingPage() {
   const [paymentStatus, setPaymentStatus] = useState<
     "pending" | "paid" | "refunded"
   >("paid");
+  const [isAdvanceBooking, setIsAdvanceBooking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voucherCode, setVoucherCode] = useState<string>("");
   const [voucherApplied, setVoucherApplied] =
@@ -226,6 +227,16 @@ export default function CreateBookingPage() {
     () => parsePositiveIntegerInput(comboQuantityInput),
     [comboQuantityInput],
   );
+
+  // When switching to advance booking mode, keep current time as start
+  useEffect(() => {
+    if (isAdvanceBooking) {
+      const now = getNowInVietnam();
+      setFormData((prev) => ({ ...prev, startTime: formatDateTimeLocal(now), endTime: "" }));
+    } else {
+      setFormData((prev) => ({ ...prev, startTime: "", endTime: "" }));
+    }
+  }, [isAdvanceBooking]);
 
   // Auto-update end time when combo is selected
   useEffect(() => {
@@ -612,6 +623,16 @@ export default function CreateBookingPage() {
       toast.error("Vui lòng nhập số combo hợp lệ");
       return false;
     }
+    if (isAdvanceBooking) {
+      if (!formData.startTime) {
+        toast.error("Vui lòng nhập thời gian bắt đầu");
+        return false;
+      }
+      if (!formData.endTime) {
+        toast.error("Vui lòng nhập thời gian kết thúc (chọn bàn và gói để tự tính)");
+        return false;
+      }
+    }
     return true;
   };
 
@@ -624,39 +645,53 @@ export default function CreateBookingPage() {
     setIsSubmitting(true);
 
     try {
-      // Compute actual start (check-in) and end times now (start = now)
-      const now = getNowInVietnam();
-      now.setSeconds(0, 0);
-      const startIso = formatDateTimeLocal(now);
+      let startIso: string;
+      let endIso: string;
 
-      let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
-      if (selectedCombo && selectedCombo.duration) {
-        endDate = new Date(
-          now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
-        );
+      if (isAdvanceBooking) {
+        // Advance booking: use user-specified start time
+        startIso = formData.startTime;
+        endIso = formData.endTime;
+
+        const startParsed = new Date(startIso);
+        const endParsed = new Date(endIso);
+        if (endParsed.getTime() <= startParsed.getTime()) {
+          toast.error("Giờ kết thúc phải sau giờ bắt đầu");
+          setIsSubmitting(false);
+          return;
+        }
+      } else {
+        // Walk-in: use current time
+        const now = getNowInVietnam();
+        now.setSeconds(0, 0);
+        startIso = formatDateTimeLocal(now);
+
+        let endDate = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+        if (selectedCombo && selectedCombo.duration) {
+          endDate = new Date(
+            now.getTime() + selectedCombo.duration * 60 * 60 * 1000,
+          );
+        }
+        endIso = formatDateTimeLocal(endDate);
+
+        if (endDate.getTime() <= now.getTime()) {
+          toast.error("Giờ kết thúc phải sau giờ bắt đầu");
+          setIsSubmitting(false);
+          return;
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          startTime: startIso,
+          endTime: endIso,
+        }));
+        setStartPreview(startIso);
       }
-      const endIso = formatDateTimeLocal(endDate);
 
-      // Basic validation for computed times
-      if (endDate.getTime() <= now.getTime()) {
-        toast.error("Giờ kết thúc phải sau giờ bắt đầu");
-        setIsSubmitting(false);
-        return;
-      }
+      // Walk-in: force checked-in + paid. Advance booking: use form payment status.
+      const resolvedStatus = isAdvanceBooking ? undefined : "checked-in";
+      const resolvedPaymentStatus = isAdvanceBooking ? paymentStatus : "paid";
 
-      // Persist computed times to formData for UI consistency
-      setFormData((prev) => ({
-        ...prev,
-        startTime: startIso,
-        endTime: endIso,
-      }));
-      setStartPreview(startIso);
-
-      // Walk-in flow: payment is required before use, so mark as checked-in + paid.
-      const resolvedStatus = "checked-in";
-      const resolvedPaymentStatus = "paid";
-
-      // Always create booking and redirect to billing page for payment/invoice
       const bookingData = {
         customer: {
           name: formData.customerName?.trim() || undefined,
@@ -666,7 +701,7 @@ export default function CreateBookingPage() {
         deskId: formData.deskId,
         startTime: dateTimeLocalToUTC(startIso),
         endTime: dateTimeLocalToUTC(endIso),
-        status: resolvedStatus,
+        ...(resolvedStatus ? { status: resolvedStatus } : {}),
         totalAmount: bookingTotalAfterVoucher,
         subtotalAmount: bookingTotal,
         discountPercent: 0,
@@ -675,7 +710,6 @@ export default function CreateBookingPage() {
         voucherCode: voucherApplied?.voucher.code || undefined,
         paymentStatus: resolvedPaymentStatus,
         notes: formData.notes,
-        // include combo selection so server and billing know this is a combo booking
         ...(selectedCombo
           ? {
               comboId: selectedCombo._id,
@@ -701,8 +735,8 @@ export default function CreateBookingPage() {
         throw new Error("Invalid booking response: missing booking ID");
       }
 
-      // Step 2: Create order if there are items in cart
-      if (cart.length > 0) {
+      // Step 2: Create order if there are items in cart (walk-in only)
+      if (!isAdvanceBooking && cart.length > 0) {
         const orderData = {
           bookingId: bookingId,
           items: cart.map((item) => ({
@@ -735,8 +769,13 @@ export default function CreateBookingPage() {
 
       toast.success("Đã tạo đặt bàn thành công!");
 
-      // Redirect to billing page so user can pay and view invoice
-      router.push(`/admin/billing/${bookingId}`);
+      if (isAdvanceBooking) {
+        // Advance booking: go to booking detail page
+        router.push(`/admin/bookings/${bookingId}`);
+      } else {
+        // Walk-in: redirect to billing page for payment/invoice
+        router.push(`/admin/billing/${bookingId}`);
+      }
     } catch (error) {
       console.error("Error creating booking:", error);
       const msg =
@@ -1003,6 +1042,20 @@ export default function CreateBookingPage() {
                   </div>
                 </div>
 
+                <div className="flex items-center gap-3 py-1">
+                  <Checkbox
+                    id="advanceBooking"
+                    checked={isAdvanceBooking}
+                    onCheckedChange={(checked) => setIsAdvanceBooking(checked === true)}
+                  />
+                  <label htmlFor="advanceBooking" className="cursor-pointer select-none">
+                    <span className="font-semibold text-sm">Đặt Trước</span>
+                    <span className="text-xs text-gray-500 block">
+                      {isAdvanceBooking ? "Khách sẽ check-in khi tới" : "Check-in ngay bây giờ"}
+                    </span>
+                  </label>
+                </div>
+
                 <div>
                   <Label htmlFor="deskId">Chọn Bàn *</Label>
                   <Select
@@ -1016,7 +1069,7 @@ export default function CreateBookingPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {desks
-                        ?.filter((desk) => desk.status === "available")
+                        ?.filter((desk) => isAdvanceBooking ? desk.status !== "maintenance" : desk.status === "available")
                         .sort((a, b) =>
                           a.label.localeCompare(b.label, undefined, {
                             numeric: true,
@@ -1247,23 +1300,35 @@ export default function CreateBookingPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="startTime">
-                      Giờ Check-in (tự động khi tạo)
+                      {isAdvanceBooking ? "Giờ Bắt Đầu *" : "Giờ Check-in (tự động khi tạo)"}
                     </Label>
-                    <Input
-                      id="startTime"
-                      type="datetime-local"
-                      value={startPreview}
-                      disabled
-                      className="bg-gray-100 cursor-not-allowed"
-                      readOnly
-                    />
+                    {isAdvanceBooking ? (
+                      <Input
+                        id="startTime"
+                        type="datetime-local"
+                        value={formData.startTime}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, startTime: e.target.value, endTime: "" }))
+                        }
+                        required
+                      />
+                    ) : (
+                      <Input
+                        id="startTime"
+                        type="datetime-local"
+                        value={startPreview}
+                        disabled
+                        className="bg-gray-100 cursor-not-allowed"
+                        readOnly
+                      />
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="endTime">
                       Giờ Kết Thúc *{" "}
-                      {selectedCombo && (
+                      {(selectedCombo || isAdvanceBooking) && (
                         <span className="text-xs text-gray-500">
-                          (Tự động tính từ combo)
+                          (Tự động tính từ {selectedCombo ? "combo" : "giờ bắt đầu + thời lượng"})
                         </span>
                       )}
                     </Label>
@@ -1278,7 +1343,13 @@ export default function CreateBookingPage() {
                   </div>
                 </div>
 
-                {/* Removed 'Đặt Trước' flow: create booking redirects to billing for payment/invoice */}
+                {isAdvanceBooking && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    <p className="font-semibold mb-1">Đặt Trước</p>
+                    <p>Booking sẽ có trạng thái <strong>Đã Xác Nhận</strong>. Khi khách tới, bấm <strong>Check-in</strong> trên trang danh sách hoặc chi tiết booking.</p>
+                    <p className="mt-2">Thanh toán có thể thu ngay hoặc khi check-in.</p>
+                  </div>
+                )}
 
                 {revealTimeCost && bookingDuration > 0 && !selectedCombo && (
                   <div className="bg-green-50 p-3 rounded-lg">
@@ -1314,8 +1385,8 @@ export default function CreateBookingPage() {
               </CardContent>
             </Card>
 
-            {/* Inventory Selection */}
-            <Card>
+            {/* Inventory Selection — hidden for advance bookings (shift-specific items) */}
+            {!isAdvanceBooking && <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ShoppingCart className="h-5 w-5" />
@@ -1407,7 +1478,7 @@ export default function CreateBookingPage() {
                   )}
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
           </div>
 
           {/* Right Column - Cart & Payment */}
@@ -1638,10 +1709,10 @@ export default function CreateBookingPage() {
                   <button
                     type="submit"
                     className="cursor-pointer w-full flex justify-between items-center bg-gradient-to-r from-slate-900 to-slate-700 text-white p-4 rounded-lg shadow-md hover:from-slate-800 hover:to-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isSubmitting || displayedGrandTotal === 0}
+                    disabled={isSubmitting || (!isAdvanceBooking && displayedGrandTotal === 0)}
                   >
                     <span className="text-lg font-semibold">
-                      {isSubmitting ? "Đang tạo đặt bàn..." : "Tổng thanh toán"}
+                      {isSubmitting ? "Đang tạo đặt bàn..." : isAdvanceBooking ? "Xác Nhận Đặt Trước" : "Tổng thanh toán"}
                     </span>
                     <span className="text-2xl font-bold">
                       {formatCurrency(displayedGrandTotal)}
@@ -1651,7 +1722,9 @@ export default function CreateBookingPage() {
 
                 {/* Info */}
                 <p className="text-xs text-gray-500 text-center">
-                  Thanh toán sẽ được đánh dấu hoàn thành trước khi sử dụng
+                  {isAdvanceBooking
+                    ? "Booking sẽ được xác nhận, khách check-in khi tới"
+                    : "Thanh toán sẽ được đánh dấu hoàn thành trước khi sử dụng"}
                 </p>
               </CardContent>
             </Card>

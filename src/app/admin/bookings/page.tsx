@@ -125,10 +125,15 @@ export default function BookingsPage() {
 
   const handleCheckIn = async (id: string) => {
     try {
-      await apiCall(`/api/bookings/${id}/checkin`, { method: "POST" });
+      await apiCall(`/api/bookings/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "checked-in" }),
+      });
       mutateBookings();
     } catch (error) {
       console.error("Error checking in:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Không thể check-in: ${message}`);
     }
   };
 

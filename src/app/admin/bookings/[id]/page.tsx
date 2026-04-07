@@ -45,7 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PrintBill } from "@/components/PrintBill";
 import { BluetoothPrintButton } from "@/components/BluetoothPrintButton";
-import { formatCurrency } from "@/lib/currency";
+import { formatCurrency, normalizeVndAmount } from "@/lib/currency";
 
 interface Booking {
   _id: string;
@@ -162,6 +162,8 @@ export default function BookingDetailPage() {
     null,
   );
   const shortCodeRequestedRef = useRef<string | null>(null);
+  const inventoryCacheRef = useRef<Record<string, any>>({});
+  const [comboDetails, setComboDetails] = useState<InventoryItem | null>(null);
 
   // Cart state for multiple items
   const [cart, setCart] = useState<
@@ -210,10 +212,164 @@ export default function BookingDetailPage() {
   const { apiCall } = useApi();
 
   const orders = ordersResponse?.orders || [];
+  const billableOrders = useMemo(() => orders.filter((o: any) => !o.isComboOrder), [orders]);
 
   const ordersTotal = useMemo(() => {
     return orders.reduce((sum, order) => sum + order.total, 0);
   }, [orders]);
+
+  // Fetch combo details when booking has a comboId that is not populated
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCombo = async () => {
+      if (!booking?.comboId) { setComboDetails(null); return; }
+      const maybeCombo = booking.comboId as any;
+      if (maybeCombo && (maybeCombo.name || maybeCombo.price)) { setComboDetails(maybeCombo); return; }
+      let comboIdStr: string | null = null;
+      if (typeof booking.comboId === 'string') { comboIdStr = booking.comboId; }
+      else if (maybeCombo && typeof maybeCombo === 'object') { comboIdStr = maybeCombo._id ? String(maybeCombo._id) : String(maybeCombo); }
+      if (!comboIdStr) return;
+      try {
+        const cached = inventoryCacheRef.current[comboIdStr];
+        if (cached) { if (!cancelled) setComboDetails(cached); }
+        else {
+          const data = await apiCall<InventoryItem>(`/api/inventory/${comboIdStr}`);
+          if (!cancelled) { setComboDetails(data || null); inventoryCacheRef.current[comboIdStr] = data || null; }
+        }
+      } catch { if (!cancelled) setComboDetails(null); }
+    };
+    fetchCombo();
+    return () => { cancelled = true; };
+  }, [booking?.comboId]);
+
+  const bookingDuration = useMemo(() => {
+    if (!booking) return 0;
+    return (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60);
+  }, [booking]);
+
+  const effectiveGuestCount = useMemo(() => {
+    if (!booking) return 1;
+    if ((booking as any).guestCount >= 1) return (booking as any).guestCount;
+    const combo = comboDetails || (booking as any).comboId;
+    if ((booking as any).isComboBooking && combo?.pricePerPerson && combo?.price > 0) {
+      const derived = Math.round(normalizeVndAmount(booking.totalAmount) / normalizeVndAmount(combo.price));
+      return derived >= 1 ? derived : 1;
+    }
+    return 1;
+  }, [booking, comboDetails]);
+
+  const effectiveComboQuantity = useMemo(() => {
+    if (!booking) return 1;
+    if ((booking as any).comboQuantity >= 1) return (booking as any).comboQuantity;
+    const combo = comboDetails || (booking as any).comboId;
+    if ((booking as any).isComboBooking && combo && !combo.pricePerPerson && Number(combo.duration || 0) > 0) {
+      const derived = Math.round(bookingDuration / Number(combo.duration || 1));
+      return derived >= 1 ? derived : 1;
+    }
+    return 1;
+  }, [booking, comboDetails, bookingDuration]);
+
+  const deskCost = useMemo(() => {
+    if (!booking) return 0;
+    const combo = comboDetails || (booking as any).comboId;
+    if ((booking as any).comboId || (booking as any).isComboBooking) {
+      if (combo?.price != null) {
+        const base = normalizeVndAmount(combo.price);
+        return combo.pricePerPerson ? base * effectiveGuestCount : base * effectiveComboQuantity;
+      }
+      return normalizeVndAmount(booking.totalAmount);
+    }
+    return Math.ceil(bookingDuration * normalizeVndAmount(booking.deskId.hourlyRate));
+  }, [booking, comboDetails, bookingDuration, effectiveGuestCount, effectiveComboQuantity]);
+
+  const appliedDiscount = useMemo(() => normalizeVndAmount((booking as any)?.discountAmount ?? 0), [booking]);
+
+  const bookingSubtotal = useMemo(() => {
+    if (!booking) return 0;
+    const persisted = normalizeVndAmount((booking as any).subtotalAmount ?? 0);
+    return persisted > 0 ? persisted : deskCost;
+  }, [booking, deskCost]);
+
+  const finalTotal = useMemo(() => Math.max(0, bookingSubtotal + normalizeVndAmount(ordersTotal) - appliedDiscount), [bookingSubtotal, ordersTotal, appliedDiscount]);
+
+  const orderItemsFlattened = useMemo(() => {
+    return billableOrders.flatMap((o: any) =>
+      o.items.map((it: any) => ({
+        name: it.name,
+        price: normalizeVndAmount(it.price),
+        quantity: it.quantity,
+        subtotal: normalizeVndAmount(it.subtotal),
+      }))
+    );
+  }, [billableOrders]);
+
+  const publicQrValue = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const code = shortCodeOverride || booking?.publicShortCode;
+    if (code) return `${window.location.origin}/q/${code}`;
+    if (booking?.publicToken) return `${window.location.origin}/p/${bookingId}?t=${booking.publicToken}`;
+    return '';
+  }, [shortCodeOverride, booking?.publicShortCode, booking?.publicToken, bookingId]);
+
+  const receiptData = useMemo(() => {
+    if (!booking) return null;
+    const comboForPrint = (comboDetails as any) || (booking.comboId as any);
+    const comboPackageProp =
+      comboForPrint && comboForPrint.price != null && comboForPrint.name
+        ? {
+            name: comboForPrint.name,
+            duration: Number(comboForPrint.duration || 0),
+            price: Number(comboForPrint.price || 0),
+            pricePerPerson: comboForPrint.pricePerPerson ?? false,
+            guestCount: effectiveGuestCount,
+            comboQuantity: effectiveComboQuantity,
+          }
+        : undefined;
+    const deskNum = parseInt(booking.deskId.label.replace(/\D/g, '')) || 0;
+    const fmtVnd = (n: number) => formatCurrency(normalizeVndAmount(n));
+    const fmtDate = (s: string) => new Date(s).toLocaleDateString('vi-VN');
+    const fmtTime = (s: string) => new Date(s).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const btItems: { name: string; qty: string; price: string }[] = [];
+    if (comboPackageProp) {
+      const isPerPerson = comboPackageProp.pricePerPerson ?? false;
+      btItems.push({
+        name: `Goi: ${comboPackageProp.name}`,
+        qty: isPerPerson ? String(comboPackageProp.guestCount ?? 1) : String(comboPackageProp.comboQuantity ?? 1),
+        price: fmtVnd(comboPackageProp.price),
+      });
+    } else {
+      const dur = bookingDuration;
+      btItems.push({
+        name: `Ban ${deskNum} (${dur % 1 === 0 ? dur : dur.toFixed(1)}h)`,
+        qty: '1',
+        price: fmtVnd(deskCost),
+      });
+    }
+    orderItemsFlattened.forEach((it) => {
+      btItems.push({ name: it.name, qty: String(it.quantity), price: fmtVnd(it.subtotal || it.price * it.quantity) });
+    });
+    return {
+      storeName: '',
+      storeAddress: 'DT743A Khu dan cu Phu Hong Thinh 9, Dong Hoa, TP.HCM',
+      invoiceNumber: booking._id.slice(-6).toUpperCase(),
+      orderCode: `#${booking._id.slice(-5).toUpperCase()}`,
+      cashier: user?.name || user?.email || 'Thu ngan',
+      table: `Ban ${deskNum}`,
+      date: fmtDate(booking.startTime),
+      timeIn: fmtTime(booking.startTime),
+      timeOut: fmtTime(booking.endTime),
+      items: btItems,
+      subtotal: fmtVnd(bookingSubtotal + normalizeVndAmount(ordersTotal)),
+      discountLabel: appliedDiscount > 0 ? `Voucher${(booking as any).appliedVoucher?.code ? ` (${(booking as any).appliedVoucher.code})` : ''}:` : undefined,
+      discountAmount: appliedDiscount > 0 ? `-${fmtVnd(appliedDiscount)}` : undefined,
+      total: fmtVnd(finalTotal),
+      footerNote: 'Goi them mon',
+      qrLabel: 'Quet ma de goi mon',
+      qrValue: publicQrValue || undefined,
+      logoUrl: '/bill-logo.png',
+      logoWidth: 320,
+    };
+  }, [booking, comboDetails, effectiveGuestCount, effectiveComboQuantity, bookingDuration, deskCost, orderItemsFlattened, bookingSubtotal, ordersTotal, appliedDiscount, finalTotal, publicQrValue, user]);
 
   // Auto-generate token if booking exists and doesn't have a valid token or short code
   useEffect(() => {
@@ -464,6 +620,48 @@ export default function BookingDetailPage() {
     }
   };
 
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const handleMarkAsPaid = async () => {
+    if (!booking) return;
+    setIsProcessingPayment(true);
+    try {
+      await apiCall(`/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        body: {
+          paymentStatus: 'paid',
+          totalAmount: finalTotal,
+          subtotalAmount: bookingSubtotal + normalizeVndAmount(ordersTotal),
+        },
+      });
+      mutateBooking();
+      toast.success('Đã đánh dấu thanh toán!');
+    } catch (error: any) {
+      toast.error(error?.message || 'Cập nhật thất bại');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleCheckInDirect = async (): Promise<boolean> => {
+    if (!booking) return false;
+    setIsProcessingPayment(true);
+    try {
+      await apiCall(`/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        body: { status: 'checked-in' },
+      });
+      mutateBooking();
+      toast.success('Đã check-in thành công!');
+      return true;
+    } catch (error: any) {
+      toast.error(error?.message || 'Check-in thất bại');
+      return false;
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
   const handleBookingStatusChange = async (newStatus: string) => {
     try {
       await apiCall(`/api/bookings/${bookingId}`, {
@@ -548,8 +746,14 @@ export default function BookingDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {/* Print Bill Button - Only visible when payment is completed */}
-          {/* <PrintBill booking={booking} orders={[]} deskHourlyRate={5} cashierName={user?.name || user?.email || "Thu ngan"} /> */}
+          {/* Print Invoice Button */}
+          {receiptData && (
+            <BluetoothPrintButton
+              className="bg-slate-800 text-white hover:bg-slate-700"
+              label="In hóa đơn"
+              receiptData={receiptData}
+            />
+          )}
           <Button
             onClick={() => router.push(`/admin/billing/${bookingId}`)}
             className="bg-green-600 hover:bg-green-700"
@@ -722,6 +926,29 @@ export default function BookingDetailPage() {
                   <p>{booking.paymentMethod}</p>
                 </div>
               )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 space-y-2">
+                {booking.status === 'confirmed' && receiptData && (
+                  <BluetoothPrintButton
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                    label={isProcessingPayment ? 'Đang xử lý...' : 'Thanh toán & In hóa đơn'}
+                    receiptData={receiptData}
+                    onBeforePrint={handleCheckInDirect}
+                  />
+                )}
+                {booking.paymentStatus === 'pending' && (
+                  <Button
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700"
+                    onClick={handleMarkAsPaid}
+                    disabled={isProcessingPayment}
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    {isProcessingPayment ? 'Đang xử lý...' : `Thanh Toán — ${formatCurrency(finalTotal)}`}
+                  </Button>
+                )}
+
+              </div>
             </CardContent>
           </Card>
 
