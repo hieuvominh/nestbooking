@@ -24,10 +24,10 @@ export interface PublicBookingPayload {
   iat?: number;
 }
 
-// Sign admin JWT token (24 hours expiry)
+// Sign admin JWT token (7 days expiry)
 export function signAdminToken(payload: Omit<AdminTokenPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: '24h',
+    expiresIn: '7d',
   });
 }
 

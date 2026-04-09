@@ -11,23 +11,34 @@ interface ApiError {
   error: string;
 }
 
+class HttpError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+async function parseErrorMessage(res: Response): Promise<string> {
+  try {
+    const error = await res.json();
+    return error?.error || error?.message || res.statusText || 'An error occurred';
+  } catch {
+    try {
+      const text = await res.text();
+      return text || res.statusText || 'An error occurred';
+    } catch {
+      return res.statusText || 'An error occurred';
+    }
+  }
+}
+
 const fetcher = (url: string, token?: string) =>
   fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   }).then(async (res) => {
     if (!res.ok) {
-      try {
-        const error = await res.json();
-        throw new Error(error?.error || error?.message || res.statusText || 'An error occurred');
-      } catch (e) {
-        // Response had no JSON body — try to get text for debugging
-        try {
-          const text = await res.text();
-          throw new Error(text || res.statusText || 'An error occurred');
-        } catch (e2) {
-          throw new Error(res.statusText || 'An error occurred');
-        }
-      }
+      const message = await parseErrorMessage(res);
+      throw new HttpError(message, res.status);
     }
     try {
       return await res.json();
@@ -45,7 +56,7 @@ export function useApi<T>(
     retryOnError?: boolean;
   } = {}
 ) {
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   
   const { data, error, mutate, isLoading } = useSWR<ApiResponse<T>, Error>(
     url ? [url, token] : null,
@@ -56,6 +67,11 @@ export function useApi<T>(
       shouldRetryOnError: options.retryOnError ?? true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
+      onError: (err) => {
+        if (err instanceof HttpError && err.status === 401) {
+          logout();
+        }
+      },
     }
   );
 
@@ -66,11 +82,18 @@ export function useApi<T>(
       body?: any;
     } = {}
   ): Promise<R> => {
-    const result = await apiCallStandalone<R>(callUrl, {
-      ...callOptions,
-      token: token || undefined,
-    });
-    return result.data;
+    try {
+      const result = await apiCallStandalone<R>(callUrl, {
+        ...callOptions,
+        token: token || undefined,
+      });
+      return result.data;
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 401) {
+        logout();
+      }
+      throw err;
+    }
   };
 
   return {
@@ -120,7 +143,7 @@ export async function apiCallStandalone<T>(
         // ignore — body already consumed or unavailable
       }
     }
-    throw new Error(errorMessage);
+    throw new HttpError(errorMessage, response.status);
   }
 
   try {
